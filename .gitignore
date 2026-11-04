@@ -54,5 +54,6 @@ TestResult.xml
 nunit-*.xml
 # Kasetownik 9000 - gotowe paczki z dotnet publish
 publish/
+dist/
 .vs/
 *.user

@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Jednoplikowa wersja Kasetownika: mały exe (Native AOT) z osadzoną, spakowaną aplikacją.
+    Przy pierwszym uruchomieniu rozpakowuje ją do %LOCALAPPDATA%\Kasetownik9000\app\<wersja> i uruchamia.
+
+    Budowanie (robi to publish.ps1):
+      dotnet publish src/Kasetownik9000.Launcher -c Release -r win-x64 -p:AppPublishDir=<folder z publish aplikacji>
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <AssemblyName>Kasetownik9000</AssemblyName>
+    <RootNamespace>Kasetownik9000.Launcher</RootNamespace>
+    <ApplicationIcon>..\Kasetownik9000\Assets\AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <StackTraceSupport>false</StackTraceSupport>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <Product>Kasetownik 9000</Product>
+    <Company>KataPultoza</Company>
+    <Version>1.0.0</Version>
+    <Description>Kasetownik 9000 — okładki na kasety magnetofonowe</Description>
+  </PropertyGroup>
+
+  <!-- Pakuje gotową aplikację i osadza ją jako zasób (payload.zip + payload.id = SHA-256 paczki). -->
+  <Target Name="EmbedAppPayload" BeforeTargets="BeforeBuild" Condition="'$(AppPublishDir)' != ''">
+    <PropertyGroup>
+      <_AppDir>$([MSBuild]::EnsureTrailingSlash('$([System.IO.Path]::GetFullPath('$(AppPublishDir)'))'))</_AppDir>
+      <_PayloadZip>$(IntermediateOutputPath)payload.zip</_PayloadZip>
+      <_PayloadId>$(IntermediateOutputPath)payload.id</_PayloadId>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_AppDir)Kasetownik9000.exe')" Text="W '$(_AppDir)' nie ma Kasetownik9000.exe — najpierw opublikuj aplikację." />
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <ZipDirectory SourceDirectory="$(_AppDir)" DestinationFile="$(_PayloadZip)" Overwrite="true" />
+    <GetFileHash Files="$(_PayloadZip)" Algorithm="SHA256">
+      <Output TaskParameter="Hash" PropertyName="_PayloadHash" />
+    </GetFileHash>
+    <WriteLinesToFile File="$(_PayloadId)" Lines="$(_PayloadHash)" Overwrite="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(_PayloadZip)" LogicalName="payload.zip" />
+      <EmbeddedResource Include="$(_PayloadId)" LogicalName="payload.id" />
+    </ItemGroup>
+    <Message Importance="high" Text="Osadzono aplikację: $(_PayloadZip) (id $(_PayloadHash.Substring(0, 12)))" />
+  </Target>
+
+</Project>

@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    Obejście dla VS Build Tools 18: vcvarsall.bat woła "vswhere.exe" po nazwie, a katalogu Installer
+    nie ma w PATH. Komunikat błędu trafia wtedy przed właściwą ścieżkę linkera Native AOT i ją psuje.
+    Zostawiamy tylko ostatni element (prawdziwy katalog z link.exe). Dotyczy wszystkich projektów w src/.
+  -->
+  <Target Name="FixNativeAotLinkerPath" AfterTargets="SetupOSSpecificProps"
+          Condition="'$(_VCVarsAllFound)' == '0' and $(_CppToolsDirectory.Contains(';'))">
+    <PropertyGroup>
+      <_CppToolsDirectory>$(_CppToolsDirectory.Substring($([MSBuild]::Add($(_CppToolsDirectory.LastIndexOf(';')), 1))))</_CppToolsDirectory>
+      <CppLinker>$(_CppToolsDirectory)link.exe</CppLinker>
+      <CppLibCreator>$(_CppToolsDirectory)lib.exe</CppLibCreator>
+    </PropertyGroup>
+    <Message Importance="normal" Text="Naprawiono ścieżkę linkera Native AOT: $(CppLinker)" />
+  </Target>
+
+</Project>

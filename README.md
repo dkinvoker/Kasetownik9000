@@ -37,10 +37,23 @@ z wyglądem prosto z magnetofonu z lat 80.
   Dla naklejek A/B pokazuje samą kasetę z etykietami.
 - Projekt zapisywany jako jeden plik `.kaseta` (JSON + osadzone obrazy).
 
-## Uruchomienie
+## Uruchomienie i rozdawanie
 
-Gotowa wersja po zbudowaniu: `publish\win-x64\Kasetownik9000.exe` (cały folder można skopiować
-na inny komputer z Windows 10 1809+ / Windows 11 — nic nie trzeba instalować).
+Po zbudowaniu (`publish.ps1`) są dwie wersje — obie działają bez instalowania czegokolwiek
+na Windows 10 2004+ / Windows 11:
+
+- **`dist\Kasetownik9000.exe` — jeden plik (~29 MB)**, najlepszy do podania komuś dalej.
+  W środku jest spakowana cała aplikacja; przy pierwszym uruchomieniu rozpakowuje się
+  do `%LOCALAPPDATA%\Kasetownik9000\app\<wersja>` (ok. 2–3 s), kolejne starty są natychmiastowe.
+  Nowsza wersja exe sama rozpakuje się obok i usunie starą. Odinstalowanie = usunięcie tego folderu.
+- **`publish\win-x64\`** — ten sam program jako zwykły folder (exe + biblioteki Windows App SDK).
+
+> Plik nie jest podpisany certyfikatem, więc Windows SmartScreen przy pierwszym uruchomieniu
+> pobranego pliku pokaże ostrzeżenie — „Więcej informacji” → „Uruchom mimo to”.
+
+WinUI 3 nie da się skompilować do jednego „gołego” exe: Windows App SDK ładuje ~240 natywnych
+bibliotek i plików zasobów, które muszą leżeć na dysku obok programu — dlatego wersja jednoplikowa
+to mały starter (też Native AOT), który je rozpakowuje ([src/Kasetownik9000.Launcher](src/Kasetownik9000.Launcher)).
 
 ## Budowanie
 
@@ -55,8 +68,11 @@ dotnet build src/Kasetownik9000/Kasetownik9000.csproj
 powershell -ExecutionPolicy Bypass -File publish.ps1
 ```
 
-`publish.ps1` robi `dotnet publish -c Release -r win-x64` z Native AOT. Projekt zawiera obejście błędu
-VS Build Tools 18, w którym linker AOT nie znajdował `vswhere.exe` — nie trzeba nic dopisywać do PATH.
+`publish.ps1` publikuje aplikację (`dotnet publish -c Release -r win-x64`, Native AOT) do `publish\win-x64`,
+a potem buduje z niej jednoplikowy `dist\Kasetownik9000.exe` (opcja `-NoSingleFile` pomija ten krok,
+`-Arch arm64` buduje wersję ARM — wymaga narzędzi C++ dla ARM64). W `src/Directory.Build.targets` jest
+obejście błędu VS Build Tools 18, w którym linker AOT nie znajdował `vswhere.exe` — nie trzeba nic
+dopisywać do PATH.
 
 ## Jak wydrukować dobrą okładkę
 
@@ -104,5 +120,6 @@ src/Kasetownik9000/
   Output/       druk GDI (PrintDlg + StretchDIBits), PDF, rozkład na arkuszu, P/Invoke
   Controls/     ColorButton (paleta retro + próbnik), SectionHeader
   Themes/       Retro.xaml — kolory, klawisze magnetofonu, wyświetlacz LCD
+src/Kasetownik9000.Launcher/   jednoplikowy starter (osadzony zip aplikacji, rozpakowanie raz na wersję)
 tools/make-icon.ps1   generator ikony (kaseta) → Assets/AppIcon.ico + .png
 ```
