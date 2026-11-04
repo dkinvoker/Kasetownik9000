@@ -31,6 +31,10 @@ z wyglądem prosto z magnetofonu z lat 80.
 - **Druk 1:1** przez systemowe okno drukowania, ze znacznikami cięcia i zgięcia, opcjonalnie
   kilka kopii na arkuszu (np. 2 J-karty na A4). Spad (domyślnie 1 mm) chroni przed białymi brzegami.
 - **Eksport PDF** (A4/Letter, rzeczywisty rozmiar, 600 DPI) i **PNG** (300/600 DPI, opcjonalnie ze spadem).
+- **Podgląd 3D** (klawisz „3D PODGLĄD” albo F3): J-karta złożona wokół kasety w przezroczystym pudełku,
+  obracanie myszą, widoki przód / 3/4 / grzbiet / tył, automatyczny obrót, pudełko do ukrycia
+  i zapis mockupu do PNG (2400 × 1600). Odświeża się na żywo podczas edycji w panelu właściwości.
+  Dla naklejek A/B pokazuje samą kasetę z etykietami.
 - Projekt zapisywany jako jeden plik `.kaseta` (JSON + osadzone obrazy).
 
 ## Uruchomienie
@@ -68,6 +72,7 @@ VS Build Tools 18, w którym linker AOT nie znajdował `vswhere.exe` — nie trz
 |---|---|
 | Ctrl+N / O / S / Shift+S | nowy / otwórz / zapisz / zapisz jako |
 | Ctrl+P · Ctrl+E | drukuj · eksport PNG |
+| F3 · Esc | podgląd 3D · powrót do edycji |
 | Ctrl+Z · Ctrl+Y | cofnij · ponów |
 | Ctrl+C / X / V / D | kopiuj / wytnij / wklej / duplikuj |
 | Del · Esc | usuń · odznacz |
@@ -82,6 +87,7 @@ Kasetownik9000.exe projekt.kaseta
 Kasetownik9000.exe projekt.kaseta --export-pdf okladka.pdf --fill
 Kasetownik9000.exe --format jcard4 --starter mixtape --export-png podglad.png --dpi 600
 Kasetownik9000.exe projekt.kaseta --print "Nazwa drukarki"
+Kasetownik9000.exe projekt.kaseta --export-3d mockup.png --yaw -28 --pitch 24 --case on
 ```
 
 Formaty: `jcard`, `jcard4`, `jcard5`, `jcard-long`, `labels`, `custom`.
@@ -93,7 +99,8 @@ Style: `retro`, `minimal`, `mixtape`, `empty`.
 src/Kasetownik9000/
   Model/        dokument, elementy, formaty, style startowe (JSON z generatorem źródeł — AOT)
   Rendering/    CardRenderer (Win2D) — jeden renderer dla ekranu, PNG, PDF i druku; AssetStore
-  Editor/       EditorView (płótno, uchwyty, przyciąganie, zoom), EditorSession (historia cofania)
+  Editor/       EditorView (płótno, uchwyty, przyciąganie, zoom), EditorSession (historia cofania),
+                Preview3DView (podgląd 3D: tekstury paneli + Transform3DEffect w perspektywie)
   Output/       druk GDI (PrintDlg + StretchDIBits), PDF, rozkład na arkuszu, P/Invoke
   Controls/     ColorButton (paleta retro + próbnik), SectionHeader
   Themes/       Retro.xaml — kolory, klawisze magnetofonu, wyświetlacz LCD

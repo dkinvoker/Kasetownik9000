@@ -94,10 +94,20 @@
                                 <TextBlock Text="DRUKUJ" />
                             </StackPanel>
                         </Button>
+                        <Rectangle Width="1" Margin="6,6" Fill="{StaticResource RetroLineBrush}" />
+                        <Button x:Name="View3DButton" Style="{StaticResource DeckKeyStyle}" Click="Toggle3D_Click" ToolTipService.ToolTip="Podgląd 3D — jak okładka wygląda na kasecie (F3)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Ellipse x:Name="View3DLed" Width="8" Height="8" Fill="#FF4A2A20" Stroke="#80000000" StrokeThickness="1" VerticalAlignment="Center" />
+                                <Border BorderBrush="{StaticResource RetroCreamBrush}" BorderThickness="1.5" CornerRadius="2" Padding="3,0" VerticalAlignment="Center">
+                                    <TextBlock Text="3D" FontSize="10" FontWeight="Bold" CharacterSpacing="40" />
+                                </Border>
+                                <TextBlock Text="PODGLĄD" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                        <Border Style="{StaticResource LcdBorderStyle}" Margin="0,0,6,3">
+                        <Border x:Name="FormatLcdBorder" Style="{StaticResource LcdBorderStyle}" Margin="0,0,6,3">
                             <TextBlock x:Name="FormatLcd" Style="{StaticResource LcdTextStyle}" Text="J-CARD" />
                         </Border>
                         <Button Style="{StaticResource DeckKeySmallStyle}" Click="ZoomOut_Click" ToolTipService.ToolTip="Pomniejsz (Ctrl+−)">
@@ -124,6 +134,7 @@
                                         <TextBlock TextWrapping="Wrap" FontSize="12" LineHeight="20">
                                             <Run FontWeight="Bold">Ctrl+N / O / S</Run> — nowy, otwórz, zapisz<LineBreak />
                                             <Run FontWeight="Bold">Ctrl+P</Run> — drukuj · <Run FontWeight="Bold">Ctrl+E</Run> — eksport PNG<LineBreak />
+                                            <Run FontWeight="Bold">F3</Run> — podgląd 3D na kasecie (Esc — powrót)<LineBreak />
                                             <Run FontWeight="Bold">Ctrl+Z / Y</Run> — cofnij / ponów<LineBreak />
                                             <Run FontWeight="Bold">Ctrl+C / V / D</Run> — kopiuj, wklej, duplikuj<LineBreak />
                                             <Run FontWeight="Bold">Del</Run> — usuń · <Run FontWeight="Bold">Esc</Run> — odznacz<LineBreak />
@@ -280,6 +291,7 @@
 
                 <!-- płótno -->
                 <editor:EditorView x:Name="CardEditor" Grid.Column="1" />
+                <editor:Preview3DView x:Name="Preview3D" Grid.Column="1" Visibility="Collapsed" />
                 <InfoBar x:Name="Toast" Grid.Column="1" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="16" MaxWidth="620" IsOpen="False"
                          Background="#F22B241F" BorderBrush="#4E4138" />
 

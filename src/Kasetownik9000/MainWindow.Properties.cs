@@ -70,7 +70,11 @@ public sealed partial class MainWindow
             if (s.Shape != ShapeKind.Line) s.HasStroke = true;
         }, ChangeFlags.Visual | ChangeFlags.Properties);
 
-        CardEditor.ZoomChanged += () => ZoomLcd.Text = string.Format(CultureInfo.InvariantCulture, "{0:0}%", CardEditor.ZoomPercent);
+        CardEditor.ZoomChanged += () =>
+        {
+            if (!_is3D) ZoomLcd.Text = string.Format(CultureInfo.InvariantCulture, "{0:0}%", CardEditor.ZoomPercent);
+        };
+        Preview3D.SaveImageRequested += async () => await Save3DImageAsync();
         CardEditor.PointerWorldMoved += p => CursorLcd.Text = p is { } w
             ? string.Format(CultureInfo.InvariantCulture, "X {0,6:0.0}   Y {1,6:0.0}  MM", w.X, w.Y)
             : "X  ---.-   Y  ---.-  MM";

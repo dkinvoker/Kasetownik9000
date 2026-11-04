@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
     private bool _ui;
     private bool _dialogOpen;
     private bool _forceClose;
+    private bool _is3D;
     private readonly nint _hwnd;
     private readonly DispatcherQueueTimer _toastTimer;
 
@@ -87,8 +88,11 @@ public sealed partial class MainWindow : Window
         }
 
         AppWindow.Closing += OnAppWindowClosing;
-        Closed += (_, _) => CardEditor.Shutdown();
+        Closed += (_, _) => { CardEditor.Shutdown(); Preview3D.Shutdown(); };
         RootHost.Loaded += (_, _) => UpdateCaptionInset();
+        // wąskie okno: chowamy wyświetlacz formatu, żeby klawisze się zmieściły
+        RootHost.SizeChanged += (_, e) =>
+            FormatLcdBorder.Visibility = e.NewSize.Width < 1420 ? Visibility.Collapsed : Visibility.Visible;
         AppWindow.Changed += (_, _) => UpdateCaptionInset();
     }
 
@@ -127,6 +131,7 @@ public sealed partial class MainWindow : Window
         s.SelectionChanged += OnSelectionChanged;
         s.DirtyChanged += UpdateTitle;
         CardEditor.Session = s;
+        Preview3D.Session = s;
         _stripeKey = null;
         OnSessionChanged(ChangeFlags.All);
         UpdateTitle();
@@ -303,10 +308,49 @@ public sealed partial class MainWindow : Window
     private async void ExportPng_Click(object sender, RoutedEventArgs e) => await ExportPngAsync();
     private async void ExportPdf_Click(object sender, RoutedEventArgs e) => await ExportPdfAsync();
     private async void Print_Click(object sender, RoutedEventArgs e) => await PrintAsync();
-    private void ZoomIn_Click(object sender, RoutedEventArgs e) => CardEditor.ZoomBy(1.25f);
-    private void ZoomOut_Click(object sender, RoutedEventArgs e) => CardEditor.ZoomBy(0.8f);
-    private void ZoomFit_Click(object sender, RoutedEventArgs e) => CardEditor.FitToView();
-    private void Zoom100_Click(object sender, RoutedEventArgs e) => CardEditor.SetZoomPercent(100);
+    private void ZoomIn_Click(object sender, RoutedEventArgs e) => ZoomBy(1.25f);
+    private void ZoomOut_Click(object sender, RoutedEventArgs e) => ZoomBy(0.8f);
+    private void ZoomFit_Click(object sender, RoutedEventArgs e) { if (_is3D) Preview3D.ResetView(); else CardEditor.FitToView(); }
+    private void Zoom100_Click(object sender, RoutedEventArgs e) { if (!_is3D) CardEditor.SetZoomPercent(100); }
+
+    private void ZoomBy(float f)
+    {
+        if (_is3D) Preview3D.ZoomBy(f);
+        else CardEditor.ZoomBy(f);
+    }
+
+    // ================================================================== podgląd 3D
+
+    private void Toggle3D_Click(object sender, RoutedEventArgs e) => Set3DMode(!_is3D);
+
+    private void Set3DMode(bool on)
+    {
+        if (_is3D == on) return;
+        _is3D = on;
+        CardEditor.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        Preview3D.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        Preview3D.IsActive = on;
+        View3DLed.Fill = new Microsoft.UI.Xaml.Media.SolidColorBrush(on
+            ? Windows.UI.Color.FromArgb(255, 255, 92, 52)
+            : Windows.UI.Color.FromArgb(255, 74, 42, 32));
+        ZoomLcd.Text = on ? "3D" : string.Format(CultureInfo.InvariantCulture, "{0:0}%", CardEditor.ZoomPercent);
+        if (!on) CardEditor.Focus(FocusState.Programmatic);
+    }
+
+    private async Task Save3DImageAsync()
+    {
+        var path = await PickSaveAsync(SuggestedName + " 3D", "Obraz PNG", ".png");
+        if (path is null) return;
+        try
+        {
+            await Preview3D.ExportPngAsync(path);
+            ShowToast($"Zapisano wizualizację: {Path.GetFileName(path)}", openPath: path);
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Nie udało się zapisać obrazu: {ex.Message}", InfoBarSeverity.Error);
+        }
+    }
 
     private void Delete_Click(object sender, RoutedEventArgs e) => _session.DeleteSelected();
     private void Duplicate_Click(object sender, RoutedEventArgs e) => _session.DuplicateSelected();
@@ -333,6 +377,13 @@ public sealed partial class MainWindow : Window
         var focused = FocusManager.GetFocusedElement(RootHost.XamlRoot);
         bool typing = focused is TextBox or PasswordBox or AutoSuggestBox or ComboBox or Slider or ListViewItem;
 
+        if (e.Key == VirtualKey.F3 || (_is3D && e.Key == VirtualKey.Escape && !typing))
+        {
+            e.Handled = true;
+            Set3DMode(e.Key == VirtualKey.F3 && !_is3D);
+            return;
+        }
+
         if (ctrl)
         {
             switch (e.Key)
@@ -342,10 +393,10 @@ public sealed partial class MainWindow : Window
                 case VirtualKey.S: e.Handled = true; await SaveAsync(shift); return;
                 case VirtualKey.P: e.Handled = true; await PrintAsync(); return;
                 case VirtualKey.E: e.Handled = true; await ExportPngAsync(); return;
-                case VirtualKey.Number0 or VirtualKey.NumberPad0: e.Handled = true; CardEditor.FitToView(); return;
-                case VirtualKey.Number1 or VirtualKey.NumberPad1: e.Handled = true; CardEditor.SetZoomPercent(100); return;
-                case VirtualKey.Add or (VirtualKey)187: e.Handled = true; CardEditor.ZoomBy(1.25f); return;
-                case VirtualKey.Subtract or (VirtualKey)189: e.Handled = true; CardEditor.ZoomBy(0.8f); return;
+                case VirtualKey.Number0 or VirtualKey.NumberPad0: e.Handled = true; ZoomFit_Click(this, new RoutedEventArgs()); return;
+                case VirtualKey.Number1 or VirtualKey.NumberPad1: e.Handled = true; Zoom100_Click(this, new RoutedEventArgs()); return;
+                case VirtualKey.Add or (VirtualKey)187: e.Handled = true; ZoomBy(1.25f); return;
+                case VirtualKey.Subtract or (VirtualKey)189: e.Handled = true; ZoomBy(0.8f); return;
             }
             if (typing) return;
             switch (e.Key)

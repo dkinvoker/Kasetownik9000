@@ -32,6 +32,7 @@ public partial class App : Application
     ///   Kasetownik9000.exe [projekt.kaseta] [--format jcard] [--starter retro] [--fill] [--dpi 300]
     ///       [--export-pdf out.pdf] [--export-png out.png] [--export-kaseta out.kaseta]
     ///       [--print "Nazwa drukarki" [--print-file wydruk.pdf]]
+    ///       [--export-3d mockup.png [--yaw -28] [--pitch 24] [--zoom 1] [--case on|off]]
     /// </summary>
     private async Task RunCliExportAsync(string[] cli)
     {
@@ -74,6 +75,16 @@ public partial class App : Application
                 await Exporter.ExportPdfAsync(Path.GetFullPath(pdf), session, opt);
             }
             if (Arg("--export-kaseta") is { } kas) await session.SaveAsync(Path.GetFullPath(kas));
+            if (Arg("--export-3d") is { } png3d)
+            {
+                var preview = new Preview3DView { Session = session };
+                await preview.PrepareAsync();
+                float F(string name, float def) => float.TryParse(Arg(name), System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : def;
+                bool? showCase = Arg("--case") switch { "on" => true, "off" => false, _ => null };
+                preview.SetView(F("--yaw", -28), F("--pitch", 24), F("--zoom", 1), showCase);
+                await preview.ExportPngAsync(Path.GetFullPath(png3d), 1600, 1100);
+            }
             if (Arg("--print") is { } printer)
             {
                 var file = Arg("--print-file") is { } pf ? Path.GetFullPath(pf) : null;
