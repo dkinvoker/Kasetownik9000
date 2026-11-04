@@ -28,6 +28,7 @@ internal static partial class Program
             foreach (var a in args) psi.ArgumentList.Add(a);
 
             using var process = Process.Start(psi) ?? throw new InvalidOperationException("Nie udało się uruchomić procesu aplikacji.");
+            TryWriteUninstallScript();
 
             // tryb linii poleceń: czekamy na wynik i zwracamy kod wyjścia; okno — od razu kończymy
             bool cli = args.Any(a => a.StartsWith("--export-", StringComparison.OrdinalIgnoreCase)
@@ -116,6 +117,101 @@ internal static partial class Program
             // plik w użyciu — spróbujemy przy kolejnym starcie
         }
     }
+
+    // ------------------------------------------------------------------ odinstalowanie
+
+    private const string UninstallScriptName = "Kasetownik9000 - odinstaluj.cmd";
+
+    /// <summary>
+    /// Kładzie obok tego exe skrypt, który usuwa rozpakowaną aplikację z %LOCALAPPDATA%.
+    /// .cmd zamiast .ps1, bo uruchamia się dwuklikiem (PowerShell otworzyłby się w Notatniku).
+    /// </summary>
+    private static void TryWriteUninstallScript()
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(Environment.ProcessPath);
+            if (string.IsNullOrEmpty(dir)) return;
+            var path = Path.Combine(dir, UninstallScriptName);
+            var content = UninstallScript.ReplaceLineEndings("\r\n"); // cmd.exe wymaga CRLF
+            if (File.Exists(path) && File.ReadAllText(path) == content) return;
+            File.WriteAllText(path, content, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        }
+        catch
+        {
+            // folder tylko do odczytu itp. — aplikacja i tak działa
+        }
+    }
+
+    private const string UninstallScript = """
+        @echo off
+        setlocal
+        chcp 65001 <nul >nul
+        title Kasetownik 9000 - odinstalowanie
+        set "APPDIR=%LOCALAPPDATA%\Kasetownik9000"
+
+        echo.
+        echo   ===  KASETOWNIK 9000 - odinstalowanie  ===
+        echo.
+        if not exist "%APPDIR%" goto :nothing
+
+        tasklist /fi "imagename eq Kasetownik9000.exe" /nh <nul 2>nul | find /i "Kasetownik9000.exe" >nul
+        if not errorlevel 1 goto :running
+
+        echo   Zostanie usunięty folder z rozpakowaną aplikacją:
+        echo     %APPDIR%
+        echo.
+        echo   Twoje projekty .kaseta, obrazy PNG i pliki PDF zostaną nietknięte.
+        echo.
+        set "ANSWER="
+        set /p "ANSWER=  Odinstalować? [T/N] "
+        if /i "%ANSWER%"=="t" goto :remove
+        if /i "%ANSWER%"=="tak" goto :remove
+        goto :cancel
+
+        :remove
+
+        rmdir /s /q "%APPDIR%" 2>nul
+        if exist "%APPDIR%" goto :failed
+
+        echo.
+        echo   Gotowe - Kasetownik 9000 został odinstalowany.
+        echo   Plik Kasetownik9000.exe możesz teraz po prostu usunąć.
+        echo   Jeśli uruchomisz go ponownie, aplikacja rozpakuje się od nowa.
+        echo.
+        pause
+        (goto) 2>nul & del "%~f0"
+
+        :nothing
+        echo   Nie ma czego usuwać - aplikacja nie jest rozpakowana na tym komputerze.
+        echo.
+        pause
+        (goto) 2>nul & del "%~f0"
+
+        :running
+        echo   Kasetownik 9000 jest teraz uruchomiony.
+        echo   Zamknij go - najpierw zapisz projekt! - i uruchom ten plik jeszcze raz.
+        echo.
+        pause
+        exit /b 1
+
+        :cancel
+        echo.
+        echo   Anulowano - nic nie zostało usunięte.
+        echo.
+        pause
+        exit /b 0
+
+        :failed
+        echo.
+        echo   Nie udało się usunąć wszystkiego - może któryś plik jest otwarty.
+        echo   Zamknij Kasetownika 9000 i spróbuj ponownie albo usuń ręcznie folder:
+        echo     %APPDIR%
+        echo.
+        pause
+        exit /b 1
+
+        """;
 
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int MessageBoxW(nint hWnd, string text, string caption, uint type);

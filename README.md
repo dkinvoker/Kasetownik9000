@@ -45,7 +45,10 @@ na Windows 10 2004+ / Windows 11:
 - **`dist\Kasetownik9000.exe` — jeden plik (~29 MB)**, najlepszy do podania komuś dalej.
   W środku jest spakowana cała aplikacja; przy pierwszym uruchomieniu rozpakowuje się
   do `%LOCALAPPDATA%\Kasetownik9000\app\<wersja>` (ok. 2–3 s), kolejne starty są natychmiastowe.
-  Nowsza wersja exe sama rozpakuje się obok i usunie starą. Odinstalowanie = usunięcie tego folderu.
+  Nowsza wersja exe sama rozpakuje się obok i usunie starą.
+  **Odinstalowanie:** po pierwszym uruchomieniu obok exe pojawia się `Kasetownik9000 - odinstaluj.cmd` —
+  dwuklik, „T” i folder w `%LOCALAPPDATA%` znika (skrypt sprawdza, czy aplikacja nie jest otwarta,
+  nie rusza projektów ani wydruków i na koniec usuwa sam siebie). Potem wystarczy skasować exe.
 - **`publish\win-x64\`** — ten sam program jako zwykły folder (exe + biblioteki Windows App SDK).
 
 > Plik nie jest podpisany certyfikatem, więc Windows SmartScreen przy pierwszym uruchomieniu
