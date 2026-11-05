@@ -12,11 +12,17 @@ public sealed class Starter(string id, string name, string description)
         new("retro", "Retro paski", "Kremowy papier, kolorowe paski jak z lat 80."),
         new("minimal", "Minimal noir", "Czarne tło, jasna typografia z dużym odstępem liter."),
         new("mixtape", "Składanka", "Papier w linie i odręczne pismo — klasyczny mixtape."),
+        new("synthwave", "Synthwave", "Neonowy zachód słońca nad siatką — lata 80. w wersji retro-futurystycznej."),
+        new("video", "Wideo 80s", "Czarne pudełko i tęczowe skośne pasy jak na kasetach wideo z wypożyczalni."),
+        new("chrome", "Chrom (Type II)", "Metaliczne srebro i grafitowy pas — okładka kasety chromowej."),
+        new("punk", "Punk ksero", "Czarno-biały zin z ksero: przekrzywione napisy, taśma i pieczątka DIY."),
+        new("kraft", "Kraft", "Szary papier pakowy, zawieszka z dziurką i maszynopis."),
+        new("swiss", "Szwajcarski", "Czerwony blok, czarna typografia i siatka — styl międzynarodowy."),
         new("empty", "Pusta karta", "Czysta biała karta — wszystko od zera."),
     ];
 }
 
-public static class Starters
+public static partial class Starters
 {
     private const string Ink = "#FF2B2420";
     private const string Cream = "#FFF3E9D2";
@@ -26,6 +32,9 @@ public static class Starters
     {
         "mixtape" => new AlbumInfo { Title = "Moja składanka", Artist = "różni wykonawcy", Note = "dla: Ciebie ♥" },
         "minimal" => new AlbumInfo { Title = "Tytuł", Artist = "Wykonawca" },
+        "synthwave" => new AlbumInfo { Title = "Neonowe noce", Artist = "Wykonawca" },
+        "punk" => new AlbumInfo { Title = "Garażowe nagrania", Artist = "Zespół" },
+        "kraft" => new AlbumInfo { Title = "Domowe archiwum", Artist = "Wykonawca" },
         _ => new AlbumInfo(),
     };
 
@@ -53,35 +62,66 @@ public static class Starters
             case "retro": Retro(d); break;
             case "minimal": Minimal(d); break;
             case "mixtape": Mixtape(d); break;
+            case "synthwave": Synthwave(d); break;
+            case "video": Video(d); break;
+            case "chrome": Chrome(d); break;
+            case "punk": Punk(d); break;
+            case "kraft": Kraft(d); break;
+            case "swiss": Swiss(d); break;
             default: d.Background = "#FFFFFFFF"; break;
         }
     }
 
     public static TextElement Text(string name, string text, double x, double y, double w, double h, double pt,
         string color = Ink, bool bold = false, TextAlign align = TextAlign.Left, TextVAlign valign = TextVAlign.Top,
-        string font = "Bahnschrift", double spacing = 0, bool upper = false, bool autoFit = false) => new()
+        string font = "Bahnschrift", double spacing = 0, bool upper = false, bool autoFit = false,
+        bool italic = false, string? shadow = null, double shadowOffset = 0.5, double rotation = 0, double lineSpacing = 1) => new()
     {
         Name = name, Text = text, X = x, Y = y, Width = w, Height = h, FontSize = pt, Color = color, Bold = bold,
         Align = align, VAlign = valign, FontFamily = font, LetterSpacing = spacing, Uppercase = upper, AutoFit = autoFit,
+        Italic = italic, Shadow = shadow is not null, ShadowColor = shadow ?? "#FF000000", ShadowOffset = shadowOffset,
+        Rotation = rotation, LineSpacing = lineSpacing,
     };
 
     public static StripesElement Stripes(string name, double x, double y, double w, double h, IEnumerable<string> colors,
-        bool vertical = false, double gap = 0) => new()
+        bool vertical = false, double gap = 0, double rotation = 0) => new()
     {
-        Name = name, X = x, Y = y, Width = w, Height = h, Colors = [.. colors], Vertical = vertical, Gap = gap,
+        Name = name, X = x, Y = y, Width = w, Height = h, Colors = [.. colors], Vertical = vertical, Gap = gap, Rotation = rotation,
     };
 
     public static ShapeElement Shape(string name, ShapeKind kind, double x, double y, double w, double h, string fill,
-        bool hasFill = true, string? stroke = null, double strokeWidth = 0.5) => new()
+        bool hasFill = true, string? stroke = null, double strokeWidth = 0.5,
+        double rotation = 0, bool dashed = false, double cornerRadius = 0, double opacity = 1) => new()
     {
         Name = name, Shape = kind, X = x, Y = y, Width = w, Height = h, FillColor = fill, HasFill = hasFill,
         HasStroke = stroke is not null, StrokeColor = stroke ?? Ink, StrokeWidth = strokeWidth,
+        Rotation = rotation, Dashed = dashed, CornerRadius = cornerRadius, Opacity = opacity,
     };
+
+    /// <summary>Linia z punktu (x1, y1) do (x2, y2) — linia w modelu jest pozioma, więc liczymy środek, długość i kąt.</summary>
+    public static ShapeElement Segment(string name, double x1, double y1, double x2, double y2, string color, double width, bool dashed = false)
+    {
+        double dx = x2 - x1, dy = y2 - y1, len = Math.Max(0.5, Math.Sqrt(dx * dx + dy * dy));
+        double cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+        return new ShapeElement
+        {
+            Name = name, Shape = ShapeKind.Line, X = cx - len / 2, Y = cy - 1, Width = len, Height = 2,
+            Rotation = Math.Atan2(dy, dx) * 180 / Math.PI, StrokeColor = color, StrokeWidth = width, HasFill = false, Dashed = dashed,
+        };
+    }
+
+    /// <summary>Pionowy zakres panelu rozszerzony o spad, jeśli panel leży przy górnej/dolnej krawędzi karty.</summary>
+    private static (double Y, double H) WithBleed(CardDocument d, double top, double h)
+    {
+        double b = Math.Max(0, d.Bleed);
+        double et = top <= 0.001 ? b : 0, eb = top + h >= d.Height - 0.001 ? b : 0;
+        return (top - et, h + et + eb);
+    }
+
+    private static string SideLetter(int labelIndex) => labelIndex switch { 0 => "A", 1 => "B", _ => $"{labelIndex + 1}" };
 
     public const string TracksA = "STRONA A\n{lista A}";
     public const string TracksB = "STRONA B\n{lista B}";
-
-
 
     private static IEnumerable<(PanelDef P, double Top, int LabelIndex)> Panels(CardDocument d)
     {

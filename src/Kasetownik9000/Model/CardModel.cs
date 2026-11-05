@@ -222,15 +222,13 @@ public sealed class StripesElement : CardElement
     public override string Glyph => "";
 }
 
-/// <summary>Format pliku projektu (.kaseta). v1 miał jedną kartę w "card", v2 — cały projekt w "project".</summary>
+/// <summary>Format pliku projektu (.kaseta): cały projekt + osadzone obrazy.</summary>
 public sealed class KasetaFile
 {
     public string App { get; set; } = "Kasetownik9000";
     public string? AppVersion { get; set; }
     public int FormatVersion { get; set; } = 2;
     public CardProject? Project { get; set; }
-    /// <summary>Tylko pliki z wersji 1.0.</summary>
-    public CardDocument? Card { get; set; }
     /// <summary>Obrazy osadzone w projekcie: id → base64.</summary>
     public Dictionary<string, string> Assets { get; set; } = [];
 }

@@ -290,24 +290,8 @@ public sealed class EditorSession
         var file = await JsonSerializer.DeserializeAsync(fs, ModelJson.Default.KasetaFile)
                    ?? throw new InvalidDataException("Pusty plik projektu.");
 
-        CardProject project;
-        if (file.Project is { Cards.Count: > 0 } p)
-        {
-            project = p;
-        }
-        else if (file.Card is { Panels.Count: > 0 } legacy)
-        {
-            // plik z wersji 1.0: jedna karta, bez danych albumu
-            if (string.IsNullOrEmpty(legacy.Name)) legacy.Name = CardFormats.Get(legacy.FormatId).TabName;
-            project = new CardProject { Cards = [legacy] };
-        }
-        else
-        {
-            throw new InvalidDataException("Plik nie zawiera karty.");
-        }
-
-        foreach (var card in project.Cards)
-            if (string.IsNullOrEmpty(card.Name)) card.Name = CardFormats.Get(card.FormatId).TabName;
+        if (file.Project is not { Cards.Count: > 0 } project)
+            throw new InvalidDataException("To nie jest projekt Kasetownika 1.5+ (pliki z wersji 1.0 nie są już obsługiwane) albo plik jest uszkodzony.");
 
         var s = new EditorSession(project) { FilePath = path };
         foreach (var (id, b64) in file.Assets)

@@ -158,11 +158,22 @@ public sealed partial class MainWindow
         }
         formats.Children.Add(labelsCheck);
 
-        var starters = new StackPanel { Spacing = 2 };
+        // same nazwy stylów (jest ich sporo) — opis wybranego pokazujemy pod podglądem
+        var styleDescription = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.8, MaxWidth = 340, Margin = new Thickness(2, 4, 0, 0),
+            Text = Starter.All.FirstOrDefault(s => s.Id == starterId)?.Description ?? "",
+        };
+        var starters = new StackPanel { Spacing = 0 };
         foreach (var st in Starter.All)
         {
-            var rb = new RadioButton { GroupName = "starter", IsChecked = st.Id == starterId, Content = TwoLines(st.Name, st.Description) };
-            rb.Checked += (_, _) => { starterId = st.Id; Refresh(); };
+            var rb = new RadioButton
+            {
+                GroupName = "starter", IsChecked = st.Id == starterId, MinHeight = 34,
+                Content = new TextBlock { Text = st.Name, FontSize = 14, FontWeight = new Windows.UI.Text.FontWeight { Weight = 600 } },
+            };
+            ToolTipService.SetToolTip(rb, st.Description);
+            rb.Checked += (_, _) => { starterId = st.Id; styleDescription.Text = st.Description; Refresh(); };
             starters.Children.Add(rb);
         }
 
@@ -173,7 +184,10 @@ public sealed partial class MainWindow
         grid.Children.Add(Column("Format", formats, 0));
         grid.Children.Add(Column("Styl startowy", starters, 1));
         var previewBorder = new Border { CornerRadius = new CornerRadius(4), Child = preview };
-        grid.Children.Add(Column("Podgląd", previewBorder, 2));
+        var previewColumn = new StackPanel { Spacing = 6 };
+        previewColumn.Children.Add(previewBorder);
+        previewColumn.Children.Add(styleDescription);
+        grid.Children.Add(Column("Podgląd", previewColumn, 2));
 
         var dlg = new ContentDialog
         {

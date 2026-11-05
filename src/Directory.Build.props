@@ -2,7 +2,7 @@
 
   <!-- Jedno miejsce z numerem wersji dla aplikacji i jednoplikowego startera. Zmiany opisuje CHANGELOG.md. -->
   <PropertyGroup>
-    <Version>1.5.0</Version>
+    <Version>1.6.0</Version>
     <!-- we właściwościach pliku samo "1.5.0" (bez doklejonego hasha commita) -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>Kasetownik 9000</Product>

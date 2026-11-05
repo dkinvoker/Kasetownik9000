@@ -3,6 +3,24 @@
 Numer wersji jest w jednym miejscu: `src/Directory.Build.props` (`<Version>`).
 Widać go na pasku tytułu aplikacji, w oknie „?” i we właściwościach pliku exe.
 
+## 1.6 — 2026-11-05
+
+### Nowe
+- **Sześć nowych stylów startowych** (razem dziesięć), każdy z wersją dla przodu, grzbietu, klapki, wkładek
+  i naklejek A/B:
+  - **Synthwave** — neonowy zachód słońca z „pociętym” słońcem nad siatką zbiegającą się na horyzoncie,
+  - **Wideo 80s** — czarne pudełko i tęczowe skośne pasy jak na kasetach wideo z wypożyczalni,
+  - **Chrom (Type II)** — metaliczne srebro, grafitowy pas z tytułem i czerwony akcent,
+  - **Punk ksero** — przekrzywione napisy, kawałki taśmy, maszynopis i pieczątka DIY,
+  - **Kraft** — papier pakowy, zawieszka z dziurką i sznurkiem, pieczątka z rokiem,
+  - **Szwajcarski** — czerwona kolumna biegnąca przez wszystkie panele, czarna typografia, siatka.
+- W oknie „Nowa kaseta” lista stylów jest zwięzła (same nazwy), a opis wybranego stylu pojawia się pod podglądem.
+- Elementy czysto tłowe w nowych stylach (siatka, metaliczne pasy) są od razu zablokowane, żeby nie łapały
+  się pod mysz przy klikaniu w napisy — odblokujesz je w warstwach.
+
+### Usunięte
+- Obsługa plików projektu z wersji 1.0. Taki plik pokazuje teraz czytelny komunikat zamiast konwersji.
+
 ## 1.5 — 2026-11-05
 
 ### Nowe
