@@ -550,8 +550,8 @@ public sealed partial class Preview3DView : UserControl
 
         // kaseta: strona A z przodu, strona B z tyłu (obrócona jak przy przekładaniu kasety)
         var cass = BoxFaces(new Vector3(cw, ch, ct));
-        cass[0].SetTexture(RenderCassette(labelA, "A", scene.CassetteOnly));
-        cass[1].SetTexture(RenderCassette(labelB, "B", scene.CassetteOnly));
+        cass[0].SetTexture(RenderCassette(labelA, "A", scene.CassetteOnly, LabelCut(labelA, labelCard, labels, 0)));
+        cass[1].SetTexture(RenderCassette(labelB, "B", scene.CassetteOnly, LabelCut(labelB, labelCard, labels, 1)));
         for (int i = 2; i < 6; i++) cass[i].Fill = ShellEdge;
         scene.Cassette.AddRange(cass);
         labelA?.Dispose();
@@ -576,8 +576,24 @@ public sealed partial class Preview3DView : UserControl
         return rt;
     }
 
-    /// <summary>Rysuje obudowę kasety (wymiary rzeczywiste 100,4 × 63,8 mm) z etykietą.</summary>
-    private static CanvasRenderTarget RenderCassette(CanvasRenderTarget? label, string side, bool cassetteOnly)
+    /// <summary>
+    /// Okienko naklejki przeliczone na etykietę 89 × 42 mm na kasecie (tekstura jest do niej rozciągana).
+    /// Bez naklejki z projektu — domyślna etykieta zawsze ma okienko; naklejka z wyłączonym okienkiem — null.
+    /// </summary>
+    private static MmRect? LabelCut(CanvasRenderTarget? texture, CardDocument? labelCard, List<int> labels, int which)
+    {
+        if (texture is null || labelCard is null || which >= labels.Count) return LabelWindow.InPanel(LabelW, LabelH);
+        var panel = labelCard.Panels[labels[which]];
+        if (!LabelWindow.Has(panel, labelCard.Width)) return null;
+        var r = LabelWindow.InPanel(labelCard.Width, panel.Height);
+        double sx = LabelW / labelCard.Width, sy = LabelH / panel.Height;
+        return new MmRect(r.X * sx, r.Y * sy, r.W * sx, r.H * sy);
+    }
+
+    private const float LabelX = 5.7f, LabelY = 3.5f, LabelW = 89, LabelH = 42;
+
+    /// <summary>Rysuje obudowę kasety (wymiary rzeczywiste 100,4 × 63,8 mm) z etykietą i okienkiem na szpule.</summary>
+    private static CanvasRenderTarget RenderCassette(CanvasRenderTarget? label, string side, bool cassetteOnly, MmRect? cut)
     {
         var rt = new CanvasRenderTarget(CanvasDevice.GetSharedDevice(), CassW * CassPxPerMm, CassH * CassPxPerMm, 96);
         using var ds = rt.CreateDrawingSession();
@@ -593,9 +609,13 @@ public sealed partial class Preview3DView : UserControl
         ds.DrawRoundedRectangle(new Rect(0.3, 0.3, CassW - 0.6, CassH - 0.6), 2.8f, 2.8f, Color.FromArgb(255, 14, 12, 11), 0.6f);
 
         // etykieta
-        var lr = new Rect(5.7, 3.5, 89, 42);
-        using (var clip = CanvasGeometry.CreateRoundedRectangle(ds, lr, 2, 2))
-        using (ds.CreateLayer(1f, clip))
+        var lr = new Rect(LabelX, LabelY, LabelW, LabelH);
+        Rect? hole = cut is { } c ? new Rect(LabelX + c.X, LabelY + c.Y, c.W, c.H) : null;
+        float hr = (float)LabelWindow.CornerRadius;
+        using (var outline = CanvasGeometry.CreateRoundedRectangle(ds, lr, 2, 2))
+        using (var holeGeo = hole is { } hrc ? CanvasGeometry.CreateRoundedRectangle(ds, hrc, hr, hr) : null)
+        using (var clip = holeGeo is null ? null : outline.CombineWith(holeGeo, Matrix3x2.Identity, CanvasGeometryCombine.Exclude))
+        using (ds.CreateLayer(1f, clip ?? outline))
         {
             if (label is not null)
             {
@@ -618,29 +638,14 @@ public sealed partial class Preview3DView : UserControl
             }
         }
 
-        // okienko z taśmą i szpule
-        var dark = Color.FromArgb(255, 24, 21, 19);
-        var win = new Rect(36, 20, 28.4, 11);
-        ds.FillRoundedRectangle(win, 1.5f, 1.5f, dark);
-        using (var clip = CanvasGeometry.CreateRoundedRectangle(ds, win, 1.5f, 1.5f))
-        using (ds.CreateLayer(1f, clip))
+        // krawędź papieru wokół wyciętego okienka, a w nim okienko z taśmą i szpule
+        if (hole is { } edge)
         {
-            var tape = Color.FromArgb(255, 92, 58, 38);
-            ds.FillCircle(28.9f, 25.5f, 15f, tape);
-            ds.FillCircle(71.5f, 25.5f, 10.5f, tape);
-            ds.FillRectangle(new Rect(win.X, win.Y, win.Width, 1.2), Color.FromArgb(50, 255, 255, 255));
+            ds.DrawRoundedRectangle(edge, hr, hr, Color.FromArgb(255, 14, 12, 11), 0.45f);
+            var lip = new Rect(edge.X - 0.2, edge.Y - 0.2, edge.Width + 0.4, edge.Height + 0.4);
+            ds.DrawRoundedRectangle(lip, hr + 0.2f, hr + 0.2f, Color.FromArgb(70, 255, 255, 255), 0.2f);
         }
-        foreach (var cx in new[] { 28.9f, 71.5f })
-        {
-            ds.FillCircle(cx, 25.5f, 6.6f, dark);
-            ds.FillCircle(cx, 25.5f, 4.6f, Color.FromArgb(255, 236, 228, 212));
-            ds.FillCircle(cx, 25.5f, 3.1f, dark);
-            for (int k = 0; k < 6; k++)
-            {
-                double a = k * Math.PI / 3;
-                ds.FillCircle(cx + (float)Math.Cos(a) * 3.1f, 25.5f + (float)Math.Sin(a) * 3.1f, 0.75f, Color.FromArgb(255, 236, 228, 212));
-            }
-        }
+        CardRenderer.DrawReels(ds, CassW / 2, LabelY + (float)(cut?.CenterY ?? LabelH * 22.0 / 42.0));
 
         // trapez na dole, otwory i śrubki
         using (var trap = CanvasGeometry.CreatePolygon(ds, [new(19, CassH), new(25, 50.5f), new(CassW - 25, 50.5f), new(CassW - 19, CassH)]))

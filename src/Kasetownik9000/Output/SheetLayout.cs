@@ -175,6 +175,8 @@ public static class CardRasterizer
             ds.Transform = Matrix3x2.CreateScale((float)Units.DipPerMm) *
                            Matrix3x2.CreateTranslation((float)(b * Units.DipPerMm), (float)(b * Units.DipPerMm));
             CardRenderer.DrawCard(ds, card, s.Assets, highQuality: true, s.Resolver);
+            // naklejki: okienko na szpule zostaje białe, z linią cięcia
+            CardRenderer.DrawLabelWindows(ds, card, LabelWindowStyle.Print);
         }
         return rt;
     }

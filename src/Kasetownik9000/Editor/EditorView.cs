@@ -187,6 +187,8 @@ public sealed partial class EditorView : UserControl
 
         ds.Transform = Matrix3x2.CreateScale(_zoom) * Matrix3x2.CreateTranslation(_pan);
         CardRenderer.DrawCard(ds, doc, s.Assets, highQuality: false, s.Resolver);
+        // okienko naklejki (otwór na szpule) — widać, co zostanie wycięte
+        CardRenderer.DrawLabelWindows(ds, doc, LabelWindowStyle.Editor, 1f / _zoom);
 
         // strefa spadu przyciemniona — to, co poza linią cięcia
         var card = CardRenderer.CardRect(doc);

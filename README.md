@@ -4,7 +4,7 @@ Aplikacja do projektowania i drukowania okładek na kasety magnetofonowe — J-c
 i naklejki na kasetę — z kalkulatorem taśmy i podglądem 3D. WinUI 3 + Win2D, skompilowana do
 **Native AOT** (okno pojawia się w ułamku sekundy), z wyglądem prosto z magnetofonu z lat 80.
 
-**Wersja 1.6** — co się zmieniało, opisuje [CHANGELOG.md](CHANGELOG.md), a pomysły na dalszy rozwój
+**Wersja 1.6.1** — co się zmieniało, opisuje [CHANGELOG.md](CHANGELOG.md), a pomysły na dalszy rozwój
 [Developement.md](Developement.md).
 
 ![ikona](src/Kasetownik9000/Assets/AppIcon.png)
@@ -20,8 +20,13 @@ i naklejki na kasetę — z kalkulatorem taśmy i podglądem 3D. WinUI 3 + Win2D
   | J-card 4-panelowa | 101,6 | wkładka 65 · przód 65 · grzbiet 12,7 · klapka 15,9 |
   | J-card 5-panelowa | 101,6 | 2 × wkładka 65 · przód 65 · grzbiet 12,7 · klapka 15,9 |
   | J-card z długą klapką | 101,6 | przód 65 · grzbiet 12,7 · tył 65 |
-  | Naklejki A/B | 89 | strona A 42 · strona B 42 (linia cięcia) |
+  | Naklejki A/B | 89 | strona A 42 · strona B 42 (linia cięcia), w każdej okienko na szpule 60 × 16 |
   | Własny | dowolna | dowolne panele — dodawanie, usuwanie, zmiana wysokości |
+- **Okienko na szpule w naklejkach**: otwór na trzpienie magnetofonu i podgląd taśmy widać w edytorze
+  (przez otwór prześwituje kaseta), na wydruku jest białe z linią cięcia i napisem „wytnij”, a w 3D naklejka
+  ma prawdziwy otwór. Wymiary jak na kasecie kompaktowej: 60 × 16 mm, środek 22 mm od górnej krawędzi
+  naklejki, osie szpul 42,6 mm od siebie. Przycisk ◎◎ przy panelu naklejki wyłącza okienko (np. dla wąskiego
+  paska nad okienkiem w formacie własnym).
 - **Style startowe** (10): Retro paski, Minimal noir, Składanka (papier w linie + odręczne pismo), Synthwave,
   Wideo 80s, Chrom (Type II), Punk ksero, Kraft, Szwajcarski i pusta karta — każdy dla wszystkich paneli i naklejek.
 - **Dane albumu i pola**: tytuł, wykonawca, rok, data, dopisek wpisujesz raz, a w tekstach używasz
@@ -99,6 +104,8 @@ dopisywać do PATH. Numer wersji zmienia się w `src/Directory.Build.props`.
 3. Najlepszy jest papier 160–200 g/m² (matowy lub satynowy).
 4. Wytnij wzdłuż znaczników cięcia (narożniki), zegnij wzdłuż znaczników zgięcia przy krawędziach —
    najlepiej po wcześniejszym nagnieceniu linii tępą stroną noża i linijką.
+5. W naklejkach wytnij białe okienko („wytnij”) nożykiem przy linijce, zanim przykleisz naklejkę na kasetę —
+   magnetofon musi mieć dostęp do szpul.
 
 ## Skróty klawiszowe
 
@@ -135,8 +142,9 @@ PDF i druk obejmują cały komplet kart, chyba że podasz `--card N` albo `--fil
 
 ```
 src/Kasetownik9000/
-  Model/        projekt i karty, elementy, formaty, style startowe (Starters, StartersMore), pola {…} (TextFields),
-                plan taśmy i import audio (TapeImport), ustawienia (kalibracja) — JSON z generatorem źródeł (AOT)
+  Model/        projekt i karty, elementy, formaty, okienko naklejki (LabelWindow), style startowe (Starters,
+                StartersMore), pola {…} (TextFields), plan taśmy i import audio (TapeImport),
+                ustawienia (kalibracja) — JSON z generatorem źródeł (AOT)
   Rendering/    CardRenderer (Win2D) — jeden renderer dla ekranu, PNG, PDF, druku i 3D; AssetStore
   Editor/       EditorView (płótno, uchwyty, przyciąganie, zoom), EditorSession (projekt, karty, cofanie),
                 Preview3DView (podgląd 3D: tekstury paneli + Transform3DEffect w perspektywie, eksport GIF)

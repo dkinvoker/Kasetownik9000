@@ -227,6 +227,7 @@ public sealed partial class MainWindow
         var d = _session.Doc;
         int count = d.Panels.Count;
         var fmt = MakeFormatter(1);
+        bool anyLabel = d.Panels.Exists(p => p.Role == PanelRole.Label);
         for (int i = 0; i < count; i++)
         {
             int index = i;
@@ -236,6 +237,8 @@ public sealed partial class MainWindow
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            int off = anyLabel ? 1 : 0; // kolumna na okienko naklejki przed cięciem i usuwaniem
+            if (anyLabel) row.ColumnDefinitions.Insert(2, new ColumnDefinition { Width = new GridLength(32) });
 
             var name = new TextBox { Text = p.Name, MinWidth = 0 };
             // TextChanged przychodzi asynchronicznie — reaguj tylko na faktyczną zmianę
@@ -270,7 +273,7 @@ public sealed partial class MainWindow
             };
             ToolTipService.SetToolTip(cut, "Pod tym panelem: linia cięcia zamiast zgięcia");
             cut.Click += (_, _) => EditDoc(null, doc => { if (index < doc.Panels.Count) doc.Panels[index].CutAfter = cut.IsChecked == true; });
-            Grid.SetColumn(cut, 2);
+            Grid.SetColumn(cut, 2 + off);
             row.Children.Add(cut);
 
             var del = new Button
@@ -284,8 +287,22 @@ public sealed partial class MainWindow
                 EditDoc(null, doc => { if (index < doc.Panels.Count && doc.Panels.Count > 1) doc.Panels.RemoveAt(index); }, ChangeFlags.All);
                 CardEditor.FitToView();
             };
-            Grid.SetColumn(del, 3);
+            Grid.SetColumn(del, 3 + off);
             row.Children.Add(del);
+
+            if (p.Role == PanelRole.Label)
+            {
+                // naklejka: okienko na szpule (do wycięcia) — można wyłączyć np. dla wąskiego paska nad okienkiem
+                var window = new ToggleButton
+                {
+                    Content = new TextBlock { Text = "◎◎", FontSize = 10, CharacterSpacing = -150 },
+                    IsChecked = p.ReelWindow, Width = 32, Height = 32, Padding = new Thickness(0),
+                };
+                ToolTipService.SetToolTip(window, "Okienko na szpule — otwór do wycięcia (widać go w edytorze, na wydruku i w 3D)");
+                window.Click += (_, _) => EditDoc(null, doc => { if (index < doc.Panels.Count) doc.Panels[index].ReelWindow = window.IsChecked == true; });
+                Grid.SetColumn(window, 2);
+                row.Children.Add(window);
+            }
 
             PanelsHost.Children.Add(row);
         }

@@ -58,13 +58,18 @@ public static partial class Starters
                     }
                 case PanelRole.Label:
                     {
-                        double horizon = top + h * 0.7, sun = h * 0.5;
-                        SynthSun(els, W - 8 - sun, horizon - sun * 0.82, sun, Sky, Sun);
-                        SynthFloor(els, d, top, h, horizon, W - 8 - sun / 2, Floor, Grid, Pink);
-                        els.Add(Text("Strona", SideLetter(li), 4, top + 3, 14, 15, 28, color: Pink, bold: true, italic: true,
-                            align: TextAlign.Center, valign: TextVAlign.Middle, shadow: Cyan, shadowOffset: 0.6));
-                        els.Add(Text("Tytuł", "{tytuł}", 19, top + 4, W - 30 - sun, 13, 14, color: Pink, bold: true, italic: true,
+                        // horyzont tuż pod okienkiem, słońce wschodzi z prawej strony okienka
+                        var win = Window(d, top, h);
+                        double horizon = win.Bottom + 0.6, sun = Math.Min(12, W - win.Right - 2.5);
+                        double sunX = win.Right + (W - win.Right - sun) / 2;
+                        SynthSun(els, sunX, horizon - sun * 0.82, sun, Sky, Sun);
+                        SynthFloor(els, d, top, h, horizon, sunX + sun / 2, Floor, Grid, Pink);
+                        els.Add(Text("Strona", SideLetter(li), 2, top + 1.5, 12, win.Y - top - 2, 24, color: Pink, bold: true, italic: true,
+                            align: TextAlign.Center, valign: TextVAlign.Middle, autoFit: true, shadow: Cyan, shadowOffset: 0.5));
+                        els.Add(Text("Tytuł", "{tytuł}", 15, top + 2, W - 19, win.Y - top - 3, 14, color: Pink, bold: true, italic: true,
                             valign: TextVAlign.Middle, upper: true, autoFit: true, shadow: Cyan, shadowOffset: 0.4));
+                        els.Add(Text("Długość", "{kaseta}", 1.5, win.Y, win.X - 3, win.H, 8, color: Cyan, italic: true,
+                            align: TextAlign.Center, valign: TextVAlign.Middle, spacing: 0.1, autoFit: true));
                         break;
                     }
             }
@@ -135,13 +140,21 @@ public static partial class Starters
                     els.Add(Text("Strona B", TracksB, W / 2 + 2, top + 9, W / 2 - 8, h - 13, 9, color: White, font: "Consolas", autoFit: true));
                     break;
                 case PanelRole.Label:
-                    els.Add(Stripes("Pasy", W * 0.45, top + h * 0.32, W * 0.8, h * 0.36, rainbow, gap: 0.6, rotation: -20));
-                    els.Add(Text("Strona", SideLetter(li), 4, top + 3, 14, 15, 28, color: White, font: "Impact", italic: true,
-                        align: TextAlign.Center, valign: TextVAlign.Middle));
-                    els.Add(Text("Tytuł", "{tytuł}", 19, top + 4, W * 0.55, 12, 14, color: White, font: "Impact", italic: true,
-                        valign: TextVAlign.Middle, upper: true, autoFit: true));
-                    els.Add(Text("Długość", "{kaseta}", 6, top + h - 10, 30, 7, 11, color: Gray, font: "Impact", italic: true));
-                    break;
+                    {
+                        // tęczowe pasy wychodzą zza okienka w prawy górny róg
+                        var win = Window(d, top, h);
+                        els.Add(Stripes("Pasy", win.Right - 9, win.CenterY - 5, 32, 10, rainbow, gap: 0.5, rotation: -20));
+                        els.Add(Text("Tytuł", "{tytuł}", 5, top + 2, W * 0.66, win.Y - top - 3, 14, color: White, font: "Impact", italic: true,
+                            valign: TextVAlign.Middle, upper: true, autoFit: true));
+                        els.Add(Text("Strona", SideLetter(li), 1.5, win.Y, win.X - 3, win.H, 28, color: White, font: "Impact", italic: true,
+                            align: TextAlign.Center, valign: TextVAlign.Middle, autoFit: true));
+                        double by = win.Bottom + 1.5, bh = top + h - by - 2;
+                        els.Add(Text("Długość", "{kaseta}", 5, by, 30, bh, 11, color: Gray, font: "Impact", italic: true,
+                            valign: TextVAlign.Middle, autoFit: true));
+                        els.Add(Text("Opis", "HIGH GRADE", W - 45, by, 40, bh, 7.5, color: White, bold: true, spacing: 0.3,
+                            align: TextAlign.Right, valign: TextVAlign.Middle));
+                        break;
+                    }
             }
         }
     }
@@ -194,14 +207,18 @@ public static partial class Starters
                     break;
                 case PanelRole.Label:
                     {
+                        // wykonawca nad okienkiem, grafitowy pas z tytułem pod nim
+                        var win = Window(d, top, h);
                         els.Add(Locked(Stripes("Metal", -b, fy, W + 2 * b, fh, metal)));
-                        double bandY = top + h * 0.5, bandH = h * 0.3;
+                        double bandY = win.Bottom + 1.2, bandH = top + h - 2 - bandY;
                         els.Add(Shape("Pas", ShapeKind.Rectangle, -b, bandY, W + 2 * b, bandH, Steel));
-                        els.Add(Text("Strona", SideLetter(li), 4, bandY, 12, bandH, 20, color: Red, bold: true,
-                            align: TextAlign.Center, valign: TextVAlign.Middle));
-                        els.Add(Text("Tytuł", "{tytuł}", 17, bandY + 0.5, W - 21, bandH - 1, 13, color: Silver, bold: true,
+                        els.Add(Text("Strona", SideLetter(li), 4, bandY, 10, bandH, 18, color: Red, bold: true,
+                            align: TextAlign.Center, valign: TextVAlign.Middle, autoFit: true));
+                        els.Add(Text("Tytuł", "{tytuł}", 16, bandY + 0.5, W - 20, bandH - 1, 13, color: Silver, bold: true,
                             valign: TextVAlign.Middle, spacing: 0.12, upper: true, autoFit: true));
-                        els.Add(Text("Wykonawca", "{wykonawca}", 6, top + 5, W - 12, 7, 10, color: Steel, bold: true, spacing: 0.25, upper: true, autoFit: true));
+                        els.Add(Text("Wykonawca", "{wykonawca}", 6, top + 3, W - 12, win.Y - top - 5.5, 10, color: Steel, bold: true,
+                            valign: TextVAlign.Middle, spacing: 0.25, upper: true, autoFit: true));
+                        els.Add(Shape("Linia", ShapeKind.Rectangle, 6, win.Y - 2, W - 12, 0.6, Red));
                         break;
                     }
             }
@@ -258,14 +275,21 @@ public static partial class Starters
                     els.Add(Text("Strona B", TracksB, W / 2 + 2, top + 11, W / 2 - 8, h - 15, 9, color: Black, bold: true, font: Mono, autoFit: true));
                     break;
                 case PanelRole.Label:
-                    els.Add(Shape("Tło litery", ShapeKind.Rectangle, 4, top + 4, 15, 15, Black, rotation: -4));
-                    els.Add(Text("Strona", SideLetter(li), 4, top + 4, 15, 15, 26, color: OffWhite, font: "Impact",
-                        align: TextAlign.Center, valign: TextVAlign.Middle, rotation: -4));
-                    els.Add(Text("Tytuł", "{tytuł}", 22, top + 4, W - 26, 15, 14, color: Black, bold: true, font: Mono,
-                        valign: TextVAlign.Middle, upper: true, autoFit: true));
-                    els.Add(Shape("Taśma", ShapeKind.Rectangle, W - 22, top + h - 12, 20, 6, Tape, rotation: -20, opacity: 0.85));
-                    els.Add(Segment("Kreska", 6, top + h - 10, W * 0.6, top + h - 11, Black, 0.8));
-                    break;
+                    {
+                        var win = Window(d, top, h);
+                        double s = win.X - 4; // kwadrat z literą w lewym pasie obok okienka
+                        els.Add(Shape("Tło litery", ShapeKind.Rectangle, 2, win.CenterY - s / 2, s, s, Black, rotation: -4));
+                        els.Add(Text("Strona", SideLetter(li), 2, win.CenterY - s / 2, s, s, 22, color: OffWhite, font: "Impact",
+                            align: TextAlign.Center, valign: TextVAlign.Middle, autoFit: true, rotation: -4));
+                        els.Add(Text("Tytuł", "{tytuł}", 5, top + 2, W - 10, win.Y - top - 3, 14, color: Black, bold: true, font: Mono,
+                            valign: TextVAlign.Middle, upper: true, autoFit: true));
+                        double by = win.Bottom + 1.2;
+                        els.Add(Text("Wykonawca", "{wykonawca}", 6, by, W * 0.6, top + h - by - 3.5, 9, color: Black, font: Mono,
+                            valign: TextVAlign.Middle, upper: true, autoFit: true));
+                        els.Add(Segment("Kreska", 6, top + h - 2.6, W * 0.6, top + h - 3.4, Black, 0.8));
+                        els.Add(Shape("Taśma", ShapeKind.Rectangle, W - 24, by + 1.5, 19, 5.5, Tape, rotation: -12, opacity: 0.85));
+                        break;
+                    }
             }
         }
     }
@@ -319,16 +343,24 @@ public static partial class Starters
                     els.Add(Text("Strona B", TracksB, W / 2 + 1, top + 9, W / 2 - 11, h - 18, 9, color: InkBrown, font: Mono, autoFit: true, rotation: -1));
                     break;
                 case PanelRole.Label:
-                    els.Add(Shape("Zawieszka", ShapeKind.Rectangle, 4, top + 4, W - 8, h - 8, Tag, stroke: InkBrown, strokeWidth: 0.35, cornerRadius: 2));
-                    els.Add(Shape("Ramka", ShapeKind.Rectangle, 6, top + 6, W - 12, h - 12, Tag, hasFill: false, stroke: InkBrown,
-                        strokeWidth: 0.25, dashed: true, cornerRadius: 1));
-                    els.Add(Text("Strona", SideLetter(li), 9, top + 8, 12, 14, 24, color: Red, bold: true, font: Serif,
-                        align: TextAlign.Center, valign: TextVAlign.Middle));
-                    els.Add(Text("Tytuł", "{tytuł}", 23, top + 8, W - 31, 14, 15, color: InkBrown, bold: true, font: Serif,
-                        valign: TextVAlign.Middle, autoFit: true));
-                    els.Add(Text("Wykonawca", "{wykonawca}", 23, top + 22, W - 31, 9, 10, color: InkBrown, font: Hand,
-                        valign: TextVAlign.Middle, autoFit: true));
-                    break;
+                    {
+                        // tytuł nad okienkiem, wykonawca pod nim, litera strony i rok po bokach — nic nie wpada w otwór
+                        var win = Window(d, top, h);
+                        els.Add(Shape("Zawieszka", ShapeKind.Rectangle, 2.5, top + 2.5, W - 5, h - 5, Tag, stroke: InkBrown, strokeWidth: 0.35, cornerRadius: 2));
+                        els.Add(Shape("Ramka", ShapeKind.Rectangle, 4.2, top + 4.2, W - 8.4, h - 8.4, Tag, hasFill: false, stroke: InkBrown,
+                            strokeWidth: 0.25, dashed: true, cornerRadius: 1));
+                        els.Add(Text("Tytuł", "{tytuł}", 7, top + 4.8, W - 14, win.Y - top - 5.6, 15, color: InkBrown, bold: true, font: Serif,
+                            align: TextAlign.Center, valign: TextVAlign.Middle, autoFit: true));
+                        els.Add(Text("Strona", SideLetter(li), 4.6, win.Y, win.X - 5.8, win.H, 24, color: Red, bold: true, font: Serif,
+                            align: TextAlign.Center, valign: TextVAlign.Middle, autoFit: true));
+                        // pionowy napis: ramka (długość okienka × szerokość pasa) obrócona o -90° wokół środka pasa
+                        double zw = W - win.Right - 5.8, zx = win.Right + 1.2 + zw / 2;
+                        els.Add(Text("Rok", "{rok}", zx - win.H / 2, win.CenterY - zw / 2, win.H, zw, 9, color: Red, bold: true, font: Mono,
+                            align: TextAlign.Center, valign: TextVAlign.Middle, spacing: 0.15, autoFit: true, rotation: -90));
+                        els.Add(Text("Wykonawca", "{wykonawca}", 7, win.Bottom + 0.6, W - 14, top + h - win.Bottom - 5.4, 10, color: InkBrown, font: Hand,
+                            align: TextAlign.Center, valign: TextVAlign.Middle, autoFit: true));
+                        break;
+                    }
             }
         }
     }
@@ -389,13 +421,17 @@ public static partial class Starters
                     }
                 case PanelRole.Label:
                     {
-                        double lc = W * 0.22;
+                        // czerwony blok kończy się przed okienkiem; tytuł nad okienkiem, wykonawca pod linią
+                        var win = Window(d, top, h);
+                        double lc = Math.Min(W * 0.22, win.X - 1.5);
                         els.Add(Shape("Blok", ShapeKind.Rectangle, -b, fy, lc + b, fh, Red));
-                        els.Add(Text("Strona", SideLetter(li), 2, top + 2, lc - 4, h - 4, 40, color: White, bold: true, font: Sans,
+                        els.Add(Text("Strona", SideLetter(li), 1.5, top + 2, lc - 3, h - 4, 40, color: White, bold: true, font: Sans,
                             align: TextAlign.Center, valign: TextVAlign.Middle, autoFit: true));
-                        els.Add(Text("Tytuł", "{tytuł}", lc + 4, top + 5, W - lc - 8, h * 0.45, 16, color: Black, bold: true, font: Sans, autoFit: true));
-                        els.Add(Shape("Linia", ShapeKind.Rectangle, lc + 4, top + h * 0.62, W - lc - 8, 0.4, Black));
-                        els.Add(Text("Wykonawca", "{wykonawca}", lc + 4, top + h * 0.62 + 1.5, W - lc - 8, 7, 10, color: Black, font: Sans, autoFit: true));
+                        els.Add(Text("Tytuł", "{tytuł}", lc + 3.5, top + 2.5, W - lc - 7, win.Y - top - 3.5, 16, color: Black, bold: true, font: Sans,
+                            valign: TextVAlign.Bottom, autoFit: true));
+                        els.Add(Shape("Linia", ShapeKind.Rectangle, lc + 3.5, win.Bottom + 1.5, W - lc - 7, 0.4, Black));
+                        els.Add(Text("Wykonawca", "{wykonawca}", lc + 3.5, win.Bottom + 2.6, W - lc - 7, top + h - win.Bottom - 4.6, 10, color: Black,
+                            font: Sans, autoFit: true));
                         break;
                     }
             }

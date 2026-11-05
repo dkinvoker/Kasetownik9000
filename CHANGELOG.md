@@ -3,6 +3,23 @@
 Numer wersji jest w jednym miejscu: `src/Directory.Build.props` (`<Version>`).
 Widać go na pasku tytułu aplikacji, w oknie „?” i we właściwościach pliku exe.
 
+## 1.6.1 — 2026-11-05
+
+### Poprawki
+- **Okienko na szpule w naklejkach A/B.** Wcześniej było widać je tylko w 3D, więc na wydruku tekst potrafił
+  wpaść w miejsce, które i tak trzeba wyciąć (np. wykonawca w stylu Kraft), a samo okienko trzeba było wycinać na oko.
+  Teraz ten sam otwór 60 × 16 mm (szpule co 42,6 mm, środek 22 mm od górnej krawędzi naklejki) jest:
+  - w edytorze — prześwituje przez niego kaseta, obrys w kolorze linii cięcia,
+  - na wydruku, w PDF i PNG — białe pole bez farby z cienką linią cięcia i napisem „wytnij”,
+  - w podglądzie 3D — naklejka ma prawdziwy otwór, przez który widać obudowę, okienko z taśmą i szpule,
+  - na miniaturach w oknie „Nowa kaseta”.
+- Wszystkie style startowe układają naklejki wokół okienka: tytuł nad nim, wykonawca pod nim, litera strony
+  (i długość kasety albo rok) po bokach.
+- Przycisk ◎◎ przy panelu naklejki (Karta → Panele) wyłącza okienko, np. dla wąskiego paska naklejanego nad okienkiem.
+
+Projekty zapisane wcześniej same dostaną okienko na naklejkach. Ich elementy zostają tam, gdzie były,
+więc warto zerknąć, czy coś nie wpada w otwór.
+
 ## 1.6 — 2026-11-05
 
 ### Nowe

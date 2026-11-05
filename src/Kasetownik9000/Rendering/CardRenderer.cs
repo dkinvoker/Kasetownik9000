@@ -10,6 +10,8 @@ using Windows.UI.Text;
 
 namespace Kasetownik9000.Rendering;
 
+public enum LabelWindowStyle { Editor, Preview, Print }
+
 /// <summary>
 /// Jeden renderer dla ekranu, PNG, PDF i druku — dzięki temu wydruk wygląda dokładnie jak podgląd.
 /// Wszystkie współrzędne w milimetrach; transformacja sesji rysowania mapuje mm → DIP.
@@ -41,6 +43,79 @@ public static class CardRenderer
             foreach (var e in doc.Elements)
             {
                 if (!e.Hidden) DrawElement(ds, e, assets, highQuality, fields);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ okienko naklejki
+
+    private static readonly Color ShellColor = Color.FromArgb(255, 46, 42, 39);
+    private static readonly Color ShellDark = Color.FromArgb(255, 24, 21, 19);
+    private static readonly Color HubCream = Color.FromArgb(255, 236, 228, 212);
+    private static readonly Color CutOrange = Color.FromArgb(230, 232, 114, 44);
+
+    /// <summary>
+    /// Okienka naklejek (otwór na szpule) rysowane na wierzchu karty.
+    /// Editor — półprzezroczysta kaseta widoczna przez otwór + linia cięcia; Preview — jak na gotowej kasecie;
+    /// Print — otwór biały (bez farby) z cienką linią cięcia i napisem „wytnij”.
+    /// </summary>
+    /// <param name="hairline">Grubość linii w mm (w edytorze: 1 piksel ekranu).</param>
+    public static void DrawLabelWindows(CanvasDrawingSession ds, CardDocument doc, LabelWindowStyle style, float hairline = 0.2f)
+    {
+        float cr = (float)LabelWindow.CornerRadius;
+        foreach (var w in LabelWindow.All(doc))
+        {
+            var r = new Rect(w.X, w.Y, w.W, w.H);
+            if (style == LabelWindowStyle.Print)
+            {
+                ds.FillRoundedRectangle(r, cr, cr, Microsoft.UI.Colors.White);
+                using var fmt = new CanvasTextFormat
+                {
+                    FontFamily = "Bahnschrift", FontSize = 2.3f,
+                    HorizontalAlignment = CanvasHorizontalAlignment.Center, VerticalAlignment = CanvasVerticalAlignment.Center,
+                };
+                ds.DrawText("✂  W Y T N I J", r, Color.FromArgb(255, 190, 190, 190), fmt);
+                var inner = new Rect(r.X + hairline / 2, r.Y + hairline / 2, r.Width - hairline, r.Height - hairline);
+                ds.DrawRoundedRectangle(inner, cr, cr, Color.FromArgb(255, 128, 128, 128), hairline);
+                continue;
+            }
+
+            using (var clip = CanvasGeometry.CreateRoundedRectangle(ds, r, cr, cr))
+            using (ds.CreateLayer(style == LabelWindowStyle.Editor ? 0.82f : 1f, clip))
+            {
+                ds.FillRectangle(r, ShellColor);
+                DrawReels(ds, (float)w.CenterX, (float)w.CenterY);
+            }
+            if (style == LabelWindowStyle.Editor)
+                ds.DrawRoundedRectangle(r, cr, cr, CutOrange, hairline);
+            else
+                ds.DrawRoundedRectangle(r, cr, cr, Color.FromArgb(160, 0, 0, 0), hairline);
+        }
+    }
+
+    /// <summary>Okienko z taśmą i dwie szpule kasety (środek między osiami szpul) — wspólne dla edytora i 3D.</summary>
+    public static void DrawReels(CanvasDrawingSession ds, float cx, float cy)
+    {
+        float hub = (float)LabelWindow.HubOffset;
+        var win = new Rect(cx - 14.2, cy - 5.5, 28.4, 11);
+        ds.FillRoundedRectangle(win, 1.5f, 1.5f, ShellDark);
+        using (var clip = CanvasGeometry.CreateRoundedRectangle(ds, win, 1.5f, 1.5f))
+        using (ds.CreateLayer(1f, clip))
+        {
+            var tape = Color.FromArgb(255, 92, 58, 38);
+            ds.FillCircle(cx - hub, cy, 15f, tape);
+            ds.FillCircle(cx + hub, cy, 10.5f, tape);
+            ds.FillRectangle(new Rect(win.X, win.Y, win.Width, 1.2), Color.FromArgb(50, 255, 255, 255));
+        }
+        foreach (var hx in new[] { cx - hub, cx + hub })
+        {
+            ds.FillCircle(hx, cy, 6.6f, ShellDark);
+            ds.FillCircle(hx, cy, 4.6f, HubCream);
+            ds.FillCircle(hx, cy, 3.1f, ShellDark);
+            for (int k = 0; k < 6; k++)
+            {
+                double a = k * Math.PI / 3;
+                ds.FillCircle(hx + (float)Math.Cos(a) * 3.1f, cy + (float)Math.Sin(a) * 3.1f, 0.75f, HubCream);
             }
         }
     }

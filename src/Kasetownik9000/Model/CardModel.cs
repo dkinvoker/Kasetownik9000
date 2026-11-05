@@ -22,7 +22,10 @@ public sealed class PanelDef
     /// <summary>Krawędź pod tym panelem to linia cięcia (a nie zgięcia).</summary>
     public bool CutAfter { get; set; }
 
-    public PanelDef Clone() => new() { Name = Name, Height = Height, Role = Role, CutAfter = CutAfter };
+    /// <summary>Naklejka na kasetę: okienko na szpule do wycięcia (patrz <see cref="LabelWindow"/>).</summary>
+    public bool ReelWindow { get; set; } = true;
+
+    public PanelDef Clone() => new() { Name = Name, Height = Height, Role = Role, CutAfter = CutAfter, ReelWindow = ReelWindow };
 }
 
 /// <summary>Jedna karta do wydruku (J-card, naklejki…). Projekt kasety może mieć ich kilka.</summary>

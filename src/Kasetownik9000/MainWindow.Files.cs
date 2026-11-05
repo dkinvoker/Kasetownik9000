@@ -242,7 +242,10 @@ public sealed partial class MainWindow
             ds.FillRectangle(x + 3, y + 4, w, h, Color.FromArgb(90, 0, 0, 0));
             ds.Transform = Matrix3x2.CreateScale(scale) * Matrix3x2.CreateTranslation(x, y);
             using (ds.CreateLayer(1f, new Rect(0, 0, doc.Width, doc.Height)))
+            {
                 CardRenderer.DrawCard(ds, doc, assets, highQuality: false, fields);
+                CardRenderer.DrawLabelWindows(ds, doc, LabelWindowStyle.Preview, 1f / scale);
+            }
             ds.Transform = Matrix3x2.Identity;
             double py = 0;
             for (int i = 0; i < doc.Panels.Count - 1; i++)
