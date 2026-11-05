@@ -29,6 +29,9 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
                     <TextBlock Text="KASETOWNIK" FontSize="17" FontWeight="Bold" CharacterSpacing="140" Foreground="{StaticResource RetroCreamBrush}" VerticalAlignment="Center" />
                     <TextBlock Text="9000" FontSize="17" FontWeight="Bold" CharacterSpacing="60" Foreground="{StaticResource RetroOrangeBrush}" VerticalAlignment="Center" />
+                    <Border Margin="6,0,0,0" Padding="5,1" CornerRadius="2" Background="{StaticResource RetroLcdBgBrush}" VerticalAlignment="Center">
+                        <TextBlock x:Name="VersionText" Text="v1.5" FontFamily="{StaticResource RetroLcdFont}" FontSize="11" Foreground="{StaticResource RetroLcdFgBrush}" />
+                    </Border>
                     <Border Margin="14,0,0,0" Padding="8,2" CornerRadius="3" Background="#22F3E9D2" VerticalAlignment="Center">
                         <TextBlock x:Name="DocTitleText" Text="bez tytułu" FontSize="12" Foreground="{StaticResource RetroCreamDimBrush}" />
                     </Border>
@@ -130,6 +133,7 @@
                             <Button.Flyout>
                                 <Flyout Placement="BottomEdgeAlignedRight">
                                     <StackPanel MaxWidth="360" Spacing="6">
+                                        <TextBlock x:Name="AboutText" Text="Kasetownik 9000" FontWeight="Bold" FontSize="15" Foreground="{StaticResource RetroOrangeBrush}" Margin="0,0,0,4" />
                                         <controls:SectionHeader Text="Skróty" />
                                         <TextBlock TextWrapping="Wrap" FontSize="12" LineHeight="20">
                                             <Run FontWeight="Bold">Ctrl+N / O / S</Run> — nowy, otwórz, zapisz<LineBreak />
@@ -228,6 +232,21 @@
                                     </StackPanel>
                                 </Button>
                             </Grid>
+
+                            <controls:SectionHeader Text="Taśma" Margin="0,6,0,0" />
+                            <Border Style="{StaticResource LcdBorderStyle}" Padding="10,6" Margin="0,0,0,2">
+                                <StackPanel Spacing="2">
+                                    <TextBlock x:Name="TapeLcdTop" Style="{StaticResource LcdTextStyle}" FontSize="12" Text="C-60   0 UTWORÓW" />
+                                    <TextBlock x:Name="TapeLcdSides" Style="{StaticResource LcdTextStyle}" FontSize="12" Text="A 0:00   B 0:00" />
+                                </StackPanel>
+                            </Border>
+                            <Button Style="{StaticResource ToolKeyStyle}" Click="TapeCalculator_Click"
+                                    ToolTipService.ToolTip="Dodaj pliki muzyczne, a aplikacja podzieli je na strony A/B i wypełni listę utworów na okładce">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8D6;" FontSize="14" Foreground="{StaticResource RetroMustardBrush}" />
+                                    <TextBlock Text="KALKULATOR TAŚMY" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
 
                         <Grid Grid.Row="1" Padding="12,6,12,12" RowSpacing="8">
@@ -292,6 +311,17 @@
                 <!-- płótno -->
                 <editor:EditorView x:Name="CardEditor" Grid.Column="1" />
                 <editor:Preview3DView x:Name="Preview3D" Grid.Column="1" Visibility="Collapsed" />
+                <!-- zakładki kart projektu (J-card, naklejki…) -->
+                <StackPanel x:Name="CardTabsBar" Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="16,14,16,0"
+                            HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <StackPanel x:Name="CardTabsHost" Orientation="Horizontal" Spacing="6" />
+                    <Button x:Name="AddCardButton" Style="{StaticResource DeckKeySmallStyle}" ToolTipService.ToolTip="Dodaj kartę do projektu (np. naklejki na kasetę)">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE710;" FontSize="11" />
+                            <TextBlock Text="KARTA" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
                 <InfoBar x:Name="Toast" Grid.Column="1" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="16" MaxWidth="620" IsOpen="False"
                          Background="#F22B241F" BorderBrush="#4E4138" />
 
@@ -302,6 +332,30 @@
 
                             <!-- ===== KARTA (nic nie zaznaczono) ===== -->
                             <StackPanel x:Name="DocSection">
+                                <controls:SectionHeader Text="Album" />
+                                <TextBlock Style="{StaticResource PropLabelStyle}" Text="Tytuł  {tytuł}" />
+                                <TextBox x:Name="AlbumTitleBox" TextChanged="AlbumField_TextChanged" />
+                                <TextBlock Style="{StaticResource PropLabelStyle}" Text="Wykonawca  {wykonawca}" />
+                                <TextBox x:Name="AlbumArtistBox" TextChanged="AlbumField_TextChanged" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource PropLabelStyle}" Text="Rok  {rok}" />
+                                        <TextBox x:Name="AlbumYearBox" TextChanged="AlbumField_TextChanged" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Style="{StaticResource PropLabelStyle}" Text="Data  {data}" />
+                                        <TextBox x:Name="AlbumDateBox" TextChanged="AlbumField_TextChanged" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Style="{StaticResource PropLabelStyle}" Text="Dopisek  {dopisek}" />
+                                <TextBox x:Name="AlbumNoteBox" TextChanged="AlbumField_TextChanged" PlaceholderText="np. dla: Ciebie ♥" />
+                                <TextBlock Style="{StaticResource HintTextStyle}" Margin="0,8,0,14"
+                                           Text="Pola w nawiasach {…} możesz wpisać w każdym tekście — na wszystkich kartach podstawią się te wartości. Listy utworów: {lista A}, {lista B} (z kalkulatora taśmy)." />
+
                                 <controls:SectionHeader Text="Karta" />
                                 <TextBlock Style="{StaticResource PropLabelStyle}" Text="Format" />
                                 <ComboBox x:Name="FormatCombo" HorizontalAlignment="Stretch" SelectionChanged="FormatCombo_SelectionChanged" />
@@ -419,6 +473,14 @@
                                     <controls:SectionHeader Text="Tekst" />
                                     <TextBox x:Name="TextInput" Margin="0,8,0,0" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" MaxHeight="220"
                                              ScrollViewer.VerticalScrollBarVisibility="Auto" TextChanged="TextInput_TextChanged" />
+                                    <Button x:Name="InsertFieldButton" Margin="0,6,0,0" HorizontalAlignment="Stretch"
+                                            ToolTipService.ToolTip="Wstaw pole, które samo podstawi tytuł, wykonawcę, listę utworów…">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{}{ }" FontWeight="Bold" Foreground="{StaticResource RetroMustardBrush}" />
+                                            <TextBlock Text="Wstaw pole" />
+                                            <FontIcon Glyph="&#xE70D;" FontSize="10" />
+                                        </StackPanel>
+                                    </Button>
                                     <TextBlock Style="{StaticResource PropLabelStyle}" Text="Czcionka" />
                                     <ComboBox x:Name="FontCombo" HorizontalAlignment="Stretch" MaxDropDownHeight="420" SelectionChanged="FontCombo_SelectionChanged">
                                         <ComboBox.ItemTemplate>

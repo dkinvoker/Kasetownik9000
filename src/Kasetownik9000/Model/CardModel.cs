@@ -25,9 +25,12 @@ public sealed class PanelDef
     public PanelDef Clone() => new() { Name = Name, Height = Height, Role = Role, CutAfter = CutAfter };
 }
 
+/// <summary>Jedna karta do wydruku (J-card, naklejki…). Projekt kasety może mieć ich kilka.</summary>
 public sealed class CardDocument
 {
     public int Version { get; set; } = 1;
+    /// <summary>Nazwa zakładki, np. "J-card" albo "Naklejki".</summary>
+    public string Name { get; set; } = "";
     public string FormatId { get; set; } = "jcard";
     public double Width { get; set; } = 101.6;
     public List<PanelDef> Panels { get; set; } = [];
@@ -65,6 +68,53 @@ public sealed class CardDocument
     }
 
     public CardElement? FindElement(string? id) => id is null ? null : Elements.Find(e => e.Id == id);
+
+    public bool HasRole(PanelRole role) => Panels.Exists(p => p.Role == role);
+}
+
+/// <summary>Dane albumu — wstawiane do tekstów przez pola {tytuł}, {wykonawca}…</summary>
+public sealed class AlbumInfo
+{
+    public string Title { get; set; } = "Tytuł albumu";
+    public string Artist { get; set; } = "Wykonawca";
+    public string Year { get; set; } = DateTime.Now.Year.ToString();
+    public string Date { get; set; } = DateTime.Now.ToString("dd.MM.yyyy");
+    public string Note { get; set; } = "";
+}
+
+public sealed class TapeTrack
+{
+    public string Title { get; set; } = "";
+    public string Artist { get; set; } = "";
+    public double Seconds { get; set; }
+    /// <summary>0 = strona A, 1 = strona B.</summary>
+    public int Side { get; set; }
+    public string? SourcePath { get; set; }
+}
+
+/// <summary>Plan nagrania: długość kasety i utwory na stronach A/B.</summary>
+public sealed class TapePlan
+{
+    public int Minutes { get; set; } = 60;
+    public double GapSeconds { get; set; } = 2;
+    public bool ShowTimes { get; set; } = true;
+    public bool ShowArtist { get; set; } = true;
+    public bool SideNumbers { get; set; }
+    public List<TapeTrack> Tracks { get; set; } = [];
+
+    [JsonIgnore] public string TapeName => $"C-{Minutes}";
+    [JsonIgnore] public double SideCapacitySeconds => Minutes * 30.0;
+}
+
+/// <summary>Projekt jednej kasety: dane albumu, plan taśmy i karty do wydruku.</summary>
+public sealed class CardProject
+{
+    public int Version { get; set; } = 2;
+    /// <summary>Styl startowy projektu — nowe karty (np. dodane naklejki) dostają ten sam wygląd.</summary>
+    public string StyleId { get; set; } = "empty";
+    public AlbumInfo Album { get; set; } = new();
+    public TapePlan Tape { get; set; } = new();
+    public List<CardDocument> Cards { get; set; } = [];
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
@@ -172,11 +222,15 @@ public sealed class StripesElement : CardElement
     public override string Glyph => "";
 }
 
-/// <summary>Format pliku projektu (.kaseta).</summary>
+/// <summary>Format pliku projektu (.kaseta). v1 miał jedną kartę w "card", v2 — cały projekt w "project".</summary>
 public sealed class KasetaFile
 {
     public string App { get; set; } = "Kasetownik9000";
-    public CardDocument Card { get; set; } = new();
+    public string? AppVersion { get; set; }
+    public int FormatVersion { get; set; } = 2;
+    public CardProject? Project { get; set; }
+    /// <summary>Tylko pliki z wersji 1.0.</summary>
+    public CardDocument? Card { get; set; }
     /// <summary>Obrazy osadzone w projekcie: id → base64.</summary>
     public Dictionary<string, string> Assets { get; set; } = [];
 }
@@ -195,6 +249,9 @@ public sealed class ClipboardPayload
     UseStringEnumConverter = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.Never)]
 [JsonSerializable(typeof(KasetaFile))]
+[JsonSerializable(typeof(CardProject))]
+[JsonSerializable(typeof(TapePlan))]
+[JsonSerializable(typeof(AppSettings))]
 [JsonSerializable(typeof(CardDocument))]
 [JsonSerializable(typeof(CardElement))]
 [JsonSerializable(typeof(ClipboardPayload))]

@@ -13,8 +13,19 @@ public sealed class CardFormat(string id, string name, string description, doubl
 
     public string SizeText => $"{Width:0.#} × {Height:0.#} mm";
 
+    /// <summary>Krótka nazwa na zakładkę karty.</summary>
+    public string TabName => Id switch
+    {
+        "labels" => "Naklejki A/B",
+        "custom" => "Karta",
+        "jcard4" => "J-card 4P",
+        "jcard5" => "J-card 5P",
+        _ => "J-card",
+    };
+
     public CardDocument CreateDocument() => new()
     {
+        Name = TabName,
         FormatId = Id,
         Width = Width,
         Panels = [.. Panels.Select(p => p.Clone())],

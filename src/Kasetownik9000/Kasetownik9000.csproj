@@ -31,9 +31,6 @@
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <Product>Kasetownik 9000</Product>
-    <Company>KataPultoza</Company>
-    <Version>1.0.0</Version>
     <Description>Projektowanie i drukowanie okładek na kasety magnetofonowe</Description>
   </PropertyGroup>
 

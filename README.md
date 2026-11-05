@@ -1,13 +1,17 @@
 # Kasetownik 9000
 
 Aplikacja do projektowania i drukowania okładek na kasety magnetofonowe — J-card, wkładki rozkładane
-i naklejki na kasetę. WinUI 3 + Win2D, skompilowana do **Native AOT** (okno pojawia się w ułamku sekundy),
-z wyglądem prosto z magnetofonu z lat 80.
+i naklejki na kasetę — z kalkulatorem taśmy i podglądem 3D. WinUI 3 + Win2D, skompilowana do
+**Native AOT** (okno pojawia się w ułamku sekundy), z wyglądem prosto z magnetofonu z lat 80.
+
+**Wersja 1.5** — co się zmieniało, opisuje [CHANGELOG.md](CHANGELOG.md).
 
 ![ikona](src/Kasetownik9000/Assets/AppIcon.png)
 
 ## Co potrafi
 
+- **Projekt = cała kaseta**: w jednym pliku `.kaseta` kilka kart (np. J-card + naklejki A/B),
+  przełączanych zakładkami nad płótnem. Wspólne dane albumu i lista utworów, wspólny wydruk.
 - **Szablony formatów** (wymiary w mm):
   | Format | Szer. | Panele (od góry) |
   |---|---|---|
@@ -18,6 +22,12 @@ z wyglądem prosto z magnetofonu z lat 80.
   | Naklejki A/B | 89 | strona A 42 · strona B 42 (linia cięcia) |
   | Własny | dowolna | dowolne panele — dodawanie, usuwanie, zmiana wysokości |
 - **Style startowe**: Retro paski, Minimal noir, Składanka (papier w linie + odręczne pismo), pusta karta.
+- **Dane albumu i pola**: tytuł, wykonawca, rok, data, dopisek wpisujesz raz, a w tekstach używasz
+  `{tytuł}`, `{wykonawca}`, `{rok}`, `{data}`, `{dopisek}`, `{kaseta}`, `{lista A}`, `{lista B}`,
+  `{czas A}`, `{czas B}`, `{czas}` — wstawiają się same na wszystkich kartach („Wstaw pole” przy tekście).
+- **Kalkulator taśmy**: C-46/C-60/C-90/C-120 albo własna długość, przerwy między utworami, import plików
+  audio (tytuł, wykonawca i czas z tagów), automatyczny podział na strony A/B, liczniki stron z ostrzeżeniem
+  „za długo”, ręczne przenoszenie, playlisty M3U. Pliki muzyczne można przeciągnąć prosto na płótno.
 - **Elementy**: tekst, obraz, prostokąt, elipsa, linia, **paski retro** (gotowe palety: zachód słońca,
   tęcza 70s, neon 80s…), lista utworów.
 - **Tekst**: dowolna czcionka systemowa, rozmiar w pt, kolor, pogrubienie/kursywa/WIELKIE LITERY,
@@ -28,14 +38,15 @@ z wyglądem prosto z magnetofonu z lat 80.
 - **Edycja myszką**: przeciąganie, uchwyty skalowania i obrotu, przyciąganie do krawędzi paneli,
   środka karty i innych elementów (Alt wyłącza), Shift = proporcje / linia prosta / obrót co 15°.
 - Warstwy (kolejność, blokada, ukrywanie), cofnij/ponów, kopiuj/wklej (także między oknami), duplikuj.
-- **Druk 1:1** przez systemowe okno drukowania, ze znacznikami cięcia i zgięcia, opcjonalnie
-  kilka kopii na arkuszu (np. 2 J-karty na A4). Spad (domyślnie 1 mm) chroni przed białymi brzegami.
-- **Eksport PDF** (A4/Letter, rzeczywisty rozmiar, 600 DPI) i **PNG** (300/600 DPI, opcjonalnie ze spadem).
+- **Druk 1:1** przez systemowe okno drukowania, ze znacznikami cięcia i zgięcia: **cały komplet na jednym
+  arkuszu** (np. J-card + naklejki A/B na A4) albo kopie jednej karty. Spad (domyślnie 1 mm) chroni przed
+  białymi brzegami.
+- **Kalibracja drukarki**: strona testowa z miarkami — po wpisaniu pomiarów wydruki są korygowane
+  (wiele drukarek drukuje 98–99% rozmiaru).
+- **Eksport PDF** (A4/Letter, rzeczywisty rozmiar, 600 DPI, wiele arkuszy) i **PNG** (300/600 DPI).
 - **Podgląd 3D** (klawisz „3D PODGLĄD” albo F3): J-karta złożona wokół kasety w przezroczystym pudełku,
-  obracanie myszą, widoki przód / 3/4 / grzbiet / tył, automatyczny obrót, pudełko do ukrycia
-  i zapis mockupu do PNG (2400 × 1600). Odświeża się na żywo podczas edycji w panelu właściwości.
-  Dla naklejek A/B pokazuje samą kasetę z etykietami.
-- Projekt zapisywany jako jeden plik `.kaseta` (JSON + osadzone obrazy).
+  na kasecie Twoje naklejki, obracanie myszą, widoki przód / 3/4 / grzbiet / tył, automatyczny obrót,
+  pudełko i okładkę można ukryć, zapis **mockupu PNG** i **animacji GIF**. Odświeża się na żywo.
 
 ## Uruchomienie i rozdawanie
 
@@ -47,8 +58,8 @@ na Windows 10 2004+ / Windows 11:
   do `%LOCALAPPDATA%\Kasetownik9000\app\<wersja>` (ok. 2–3 s), kolejne starty są natychmiastowe.
   Nowsza wersja exe sama rozpakuje się obok i usunie starą.
   **Odinstalowanie:** po pierwszym uruchomieniu obok exe pojawia się `Kasetownik9000 - odinstaluj.cmd` —
-  dwuklik, „T” i folder w `%LOCALAPPDATA%` znika (skrypt sprawdza, czy aplikacja nie jest otwarta,
-  nie rusza projektów ani wydruków i na koniec usuwa sam siebie). Potem wystarczy skasować exe.
+  dwuklik, „T” i folder w `%LOCALAPPDATA%` znika razem z ustawieniami (skrypt sprawdza, czy aplikacja nie jest
+  otwarta, nie rusza projektów ani wydruków i na koniec usuwa sam siebie). Potem wystarczy skasować exe.
 - **`publish\win-x64\`** — ten sam program jako zwykły folder (exe + biblioteki Windows App SDK).
 
 > Plik nie jest podpisany certyfikatem, więc Windows SmartScreen przy pierwszym uruchomieniu
@@ -75,14 +86,16 @@ powershell -ExecutionPolicy Bypass -File publish.ps1
 a potem buduje z niej jednoplikowy `dist\Kasetownik9000.exe` (opcja `-NoSingleFile` pomija ten krok,
 `-Arch arm64` buduje wersję ARM — wymaga narzędzi C++ dla ARM64). W `src/Directory.Build.targets` jest
 obejście błędu VS Build Tools 18, w którym linker AOT nie znajdował `vswhere.exe` — nie trzeba nic
-dopisywać do PATH.
+dopisywać do PATH. Numer wersji zmienia się w `src/Directory.Build.props`.
 
 ## Jak wydrukować dobrą okładkę
 
-1. Drukuj z aplikacji (DRUKUJ) — karta idzie w skali 1:1. Z PDF-a drukuj w skali **100% /
+1. Najpierw raz **skalibruj drukarkę** (DRUKUJ → „Kalibracja…”): wydrukuj stronę testową, zmierz miarki
+   i odległość krzyżyka od krawędzi kartki, wpisz wyniki.
+2. Drukuj z aplikacji (DRUKUJ) — karty idą w skali 1:1. Z PDF-a drukuj w skali **100% /
    „Rzeczywisty rozmiar”**, nigdy „Dopasuj do strony”.
-2. Najlepszy jest papier 160–200 g/m² (matowy lub satynowy).
-3. Wytnij wzdłuż znaczników cięcia (narożniki), zegnij wzdłuż znaczników zgięcia przy krawędziach —
+3. Najlepszy jest papier 160–200 g/m² (matowy lub satynowy).
+4. Wytnij wzdłuż znaczników cięcia (narożniki), zegnij wzdłuż znaczników zgięcia przy krawędziach —
    najlepiej po wcześniejszym nagnieceniu linii tępą stroną noża i linijką.
 
 ## Skróty klawiszowe
@@ -103,26 +116,33 @@ dopisywać do PATH.
 
 ```bash
 Kasetownik9000.exe projekt.kaseta
-Kasetownik9000.exe projekt.kaseta --export-pdf okladka.pdf --fill
-Kasetownik9000.exe --format jcard4 --starter mixtape --export-png podglad.png --dpi 600
+Kasetownik9000.exe projekt.kaseta --export-pdf komplet.pdf
+Kasetownik9000.exe projekt.kaseta --card 1 --fill --export-pdf dwie-jkarty.pdf
+Kasetownik9000.exe --format jcard4 --starter mixtape --komplet --tracks "C:\Muzyka\Składanka" --tape 60 --export-kaseta skladanka.kaseta
+Kasetownik9000.exe projekt.kaseta --export-3d mockup.png --yaw -28 --pitch 24 --case on --cover on
+Kasetownik9000.exe projekt.kaseta --export-gif obrot.gif
 Kasetownik9000.exe projekt.kaseta --print "Nazwa drukarki"
-Kasetownik9000.exe projekt.kaseta --export-3d mockup.png --yaw -28 --pitch 24 --case on
+Kasetownik9000.exe --print-calibration "Nazwa drukarki"
 ```
 
 Formaty: `jcard`, `jcard4`, `jcard5`, `jcard-long`, `labels`, `custom`.
 Style: `retro`, `minimal`, `mixtape`, `empty`.
+PDF i druk obejmują cały komplet kart, chyba że podasz `--card N` albo `--fill`.
 
 ## Struktura
 
 ```
 src/Kasetownik9000/
-  Model/        dokument, elementy, formaty, style startowe (JSON z generatorem źródeł — AOT)
-  Rendering/    CardRenderer (Win2D) — jeden renderer dla ekranu, PNG, PDF i druku; AssetStore
-  Editor/       EditorView (płótno, uchwyty, przyciąganie, zoom), EditorSession (historia cofania),
-                Preview3DView (podgląd 3D: tekstury paneli + Transform3DEffect w perspektywie)
-  Output/       druk GDI (PrintDlg + StretchDIBits), PDF, rozkład na arkuszu, P/Invoke
+  Model/        projekt i karty, elementy, formaty, style startowe, pola {…} (TextFields),
+                plan taśmy i import audio (TapeImport), ustawienia (kalibracja) — JSON z generatorem źródeł (AOT)
+  Rendering/    CardRenderer (Win2D) — jeden renderer dla ekranu, PNG, PDF, druku i 3D; AssetStore
+  Editor/       EditorView (płótno, uchwyty, przyciąganie, zoom), EditorSession (projekt, karty, cofanie),
+                Preview3DView (podgląd 3D: tekstury paneli + Transform3DEffect w perspektywie, eksport GIF)
+  Output/       druk GDI (PrintDlg + StretchDIBits, kalibracja), PDF, rozkład kart na arkuszach, GifEncoder
   Controls/     ColorButton (paleta retro + próbnik), SectionHeader
   Themes/       Retro.xaml — kolory, klawisze magnetofonu, wyświetlacz LCD
+  MainWindow.*  okno: właściwości, pliki i druk, kalkulator taśmy (MainWindow.Tape.cs)
 src/Kasetownik9000.Launcher/   jednoplikowy starter (osadzony zip aplikacji, rozpakowanie raz na wersję)
-tools/make-icon.ps1   generator ikony (kaseta) → Assets/AppIcon.ico + .png
+src/Directory.Build.props      numer wersji
+tools/make-icon.ps1            generator ikony (kaseta) → Assets/AppIcon.ico + .png
 ```

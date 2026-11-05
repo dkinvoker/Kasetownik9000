@@ -45,9 +45,9 @@ public sealed partial class MainWindow : Window
         SetupWindow();
         SetupControls();
 
-        var doc = CardFormats.Get("jcard").CreateDocument();
-        Starters.Apply(doc, "retro");
-        LoadSession(new EditorSession(doc));
+        VersionText.Text = "v" + AppInfo.Version;
+        AboutText.Text = AppInfo.FullName;
+        LoadSession(new EditorSession(Starters.CreateProject("jcard", "retro", withLabels: true)));
 
         var args = Environment.GetCommandLineArgs();
         if (args.Length > 1 && File.Exists(args[1]))
@@ -58,7 +58,7 @@ public sealed partial class MainWindow : Window
 
     private void SetupWindow()
     {
-        Title = "Kasetownik 9000";
+        Title = AppInfo.FullName;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
 
@@ -133,17 +133,105 @@ public sealed partial class MainWindow : Window
         CardEditor.Session = s;
         Preview3D.Session = s;
         _stripeKey = null;
+        _viewKey = null;
         OnSessionChanged(ChangeFlags.All);
         UpdateTitle();
     }
 
+    private string? _viewKey;
+
     private void OnSessionChanged(ChangeFlags f)
     {
+        if (f.HasFlag(ChangeFlags.Cards)) RebuildCardTabs();
         if (f.HasFlag(ChangeFlags.Layers)) RebuildLayers();
         if (f.HasFlag(ChangeFlags.Document)) RefreshDocPanel();
         if (f.HasFlag(ChangeFlags.Properties)) RefreshProperties();
+        if (f.HasFlag(ChangeFlags.Project) || f.HasFlag(ChangeFlags.Cards)) UpdateTapeLcd();
         UpdateCommandStates();
         UpdateFormatLcd();
+
+        // inna karta (albo inny format) — dopasuj widok płótna
+        var key = $"{_session.ActiveIndex}|{_session.Project.Cards.Count}|{_session.Doc.FormatId}";
+        if (key != _viewKey)
+        {
+            bool first = _viewKey is null;
+            _viewKey = key;
+            if (!first) CardEditor.FitToView();
+        }
+    }
+
+    // ================================================================== zakładki kart
+
+    private void RebuildCardTabs()
+    {
+        CardTabsHost.Children.Clear();
+        var res = Application.Current.Resources;
+        var cards = _session.Project.Cards;
+        for (int i = 0; i < cards.Count; i++)
+        {
+            int index = i;
+            var card = cards[i];
+            bool active = i == _session.ActiveIndex;
+            var tab = new Button
+            {
+                Style = (Style)res["DeckKeySmallStyle"],
+                Content = (string.IsNullOrWhiteSpace(card.Name) ? $"KARTA {i + 1}" : card.Name).ToUpperInvariant(),
+                Padding = new Thickness(12, 0, 12, 0),
+                Background = (Microsoft.UI.Xaml.Media.Brush)res[active ? "DeckKeyAccentBrush" : "DeckKeyBrush"],
+                Foreground = active
+                    ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 30, 25, 22))
+                    : (Microsoft.UI.Xaml.Media.Brush)res["RetroCreamBrush"],
+            };
+            ToolTipService.SetToolTip(tab, $"{card.Name} — {card.Width:0.#} × {card.Height:0.#} mm (prawy przycisk: więcej)");
+            tab.Click += (_, _) => _session.SelectCard(index);
+
+            var menu = new MenuFlyout();
+            var rename = new MenuFlyoutItem { Text = "Zmień nazwę…", Icon = new FontIcon { Glyph = "" } };
+            rename.Click += async (_, _) => await RenameCardAsync(index);
+            menu.Items.Add(rename);
+            var remove = new MenuFlyoutItem { Text = "Usuń kartę", Icon = new FontIcon { Glyph = "" }, IsEnabled = cards.Count > 1 };
+            remove.Click += (_, _) => _session.RemoveCard(index);
+            menu.Items.Add(remove);
+            tab.ContextFlyout = menu;
+
+            CardTabsHost.Children.Add(tab);
+        }
+    }
+
+    private void SetupAddCardMenu()
+    {
+        var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
+        foreach (var f in CardFormats.All)
+        {
+            var item = new MenuFlyoutItem { Text = $"{f.Name}  ·  {f.SizeText}" };
+            item.Click += (_, _) =>
+            {
+                var doc = f.CreateDocument();
+                Starters.Apply(doc, _session.Project.StyleId);
+                _session.AddCard(doc);
+                ShowToast($"Dodano kartę „{doc.Name}” — przełączaj karty zakładkami nad płótnem.", InfoBarSeverity.Informational);
+            };
+            menu.Items.Add(item);
+        }
+        AddCardButton.Flyout = menu;
+    }
+
+    private async Task RenameCardAsync(int index)
+    {
+        if (index >= _session.Project.Cards.Count) return;
+        var box = new TextBox { Text = _session.Project.Cards[index].Name, MinWidth = 280 };
+        box.SelectAll();
+        var dlg = new ContentDialog
+        {
+            Title = "Nazwa karty",
+            Content = box,
+            PrimaryButtonText = "Zapisz",
+            CloseButtonText = "Anuluj",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        if (await ShowDialogAsync(dlg) != ContentDialogResult.Primary || string.IsNullOrWhiteSpace(box.Text)) return;
+        var name = box.Text.Trim();
+        _session.Edit(null, () => _session.Project.Cards[index].Name = name, ChangeFlags.Cards | ChangeFlags.Visual);
     }
 
     private void OnSelectionChanged()
@@ -156,7 +244,7 @@ public sealed partial class MainWindow : Window
     {
         var name = _session.DisplayName;
         DocTitleText.Text = _session.IsDirty ? $"{name}  •  niezapisane" : name;
-        Title = $"{name}{(_session.IsDirty ? "*" : "")} — Kasetownik 9000";
+        Title = $"{name}{(_session.IsDirty ? "*" : "")} — {AppInfo.FullName}";
     }
 
     private void UpdateCommandStates()
@@ -330,11 +418,29 @@ public sealed partial class MainWindow : Window
         CardEditor.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         Preview3D.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         Preview3D.IsActive = on;
+        CardTabsBar.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         View3DLed.Fill = new Microsoft.UI.Xaml.Media.SolidColorBrush(on
             ? Windows.UI.Color.FromArgb(255, 255, 92, 52)
             : Windows.UI.Color.FromArgb(255, 74, 42, 32));
         ZoomLcd.Text = on ? "3D" : string.Format(CultureInfo.InvariantCulture, "{0:0}%", CardEditor.ZoomPercent);
         if (!on) CardEditor.Focus(FocusState.Programmatic);
+    }
+
+    private async Task Save3DGifAsync()
+    {
+        var path = await PickSaveAsync(SuggestedName + " 3D", "Animacja GIF", ".gif");
+        if (path is null) return;
+        try
+        {
+            ShowToast("Nagrywam obrót kasety… 0%", InfoBarSeverity.Informational);
+            var progress = new Progress<double>(p => Toast.Message = $"Nagrywam obrót kasety… {p * 100:0}%");
+            await Preview3D.ExportGifAsync(path, progress: progress);
+            ShowToast($"Zapisano animację: {Path.GetFileName(path)} ({new FileInfo(path).Length / 1024.0 / 1024.0:0.0} MB)", openPath: path);
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Nie udało się zapisać GIF-a: {ex.Message}", InfoBarSeverity.Error);
+        }
     }
 
     private async Task Save3DImageAsync()

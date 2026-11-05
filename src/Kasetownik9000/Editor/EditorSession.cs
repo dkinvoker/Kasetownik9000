@@ -14,12 +14,16 @@ public enum ChangeFlags
     Layers = 2,
     /// <summary>Zmieniły się właściwości zaznaczonego elementu.</summary>
     Properties = 4,
-    /// <summary>Zmieniły się ustawienia dokumentu (format, panele, tło).</summary>
+    /// <summary>Zmieniły się ustawienia karty (format, panele, tło).</summary>
     Document = 8,
-    All = Visual | Layers | Properties | Document,
+    /// <summary>Zmieniła się lista kart albo aktywna karta.</summary>
+    Cards = 16,
+    /// <summary>Zmieniły się dane albumu lub plan taśmy.</summary>
+    Project = 32,
+    All = Visual | Layers | Properties | Document | Cards | Project,
 }
 
-/// <summary>Stan otwartego projektu: dokument, obrazy, zaznaczenie, historia cofania.</summary>
+/// <summary>Stan otwartego projektu: karty, dane albumu, obrazy, zaznaczenie, historia cofania.</summary>
 public sealed class EditorSession
 {
     private readonly List<string> _undo = [];
@@ -28,19 +32,27 @@ public sealed class EditorSession
     private DateTime _lastTime;
     private const int MaxHistory = 200;
 
-    public CardDocument Doc { get; private set; }
+    public CardProject Project { get; private set; }
+    public int ActiveIndex { get; private set; }
     public AssetStore Assets { get; } = new();
     public string? FilePath { get; set; }
     public bool IsDirty { get; private set; }
     public CardElement? Selected { get; private set; }
 
+    /// <summary>Aktywna (edytowana) karta.</summary>
+    public CardDocument Doc => Project.Cards[ActiveIndex];
+
+    public TextResolver Resolver { get; private set; }
+
     public event Action<ChangeFlags>? Changed;
     public event Action? SelectionChanged;
     public event Action? DirtyChanged;
 
-    public EditorSession(CardDocument doc)
+    public EditorSession(CardProject project)
     {
-        Doc = doc;
+        if (project.Cards.Count == 0) project.Cards.Add(CardFormats.Get("jcard").CreateDocument());
+        Project = project;
+        Resolver = new TextResolver(project);
         Assets.BitmapLoaded += () => Changed?.Invoke(ChangeFlags.Visual);
     }
 
@@ -49,7 +61,7 @@ public sealed class EditorSession
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
 
-    // ------------------------------------------------------------------ zaznaczenie
+    // ------------------------------------------------------------------ zaznaczenie i karty
 
     public void Select(CardElement? e)
     {
@@ -57,6 +69,38 @@ public sealed class EditorSession
         Selected = e;
         SelectionChanged?.Invoke();
         Changed?.Invoke(ChangeFlags.Visual | ChangeFlags.Properties);
+    }
+
+    public void SelectCard(int index)
+    {
+        index = Math.Clamp(index, 0, Project.Cards.Count - 1);
+        if (index == ActiveIndex) return;
+        ActiveIndex = index;
+        Selected = null;
+        _lastKey = null;
+        SelectionChanged?.Invoke();
+        Changed?.Invoke(ChangeFlags.All);
+    }
+
+    public void AddCard(CardDocument card)
+    {
+        BeginEdit();
+        Project.Cards.Add(card);
+        ActiveIndex = Project.Cards.Count - 1;
+        Selected = null;
+        SelectionChanged?.Invoke();
+        Changed?.Invoke(ChangeFlags.All);
+    }
+
+    public void RemoveCard(int index)
+    {
+        if (Project.Cards.Count <= 1 || index < 0 || index >= Project.Cards.Count) return;
+        BeginEdit();
+        Project.Cards.RemoveAt(index);
+        ActiveIndex = Math.Clamp(ActiveIndex >= index ? ActiveIndex - 1 : ActiveIndex, 0, Project.Cards.Count - 1);
+        Selected = null;
+        SelectionChanged?.Invoke();
+        Changed?.Invoke(ChangeFlags.All);
     }
 
     // ------------------------------------------------------------------ edycja i historia
@@ -92,6 +136,10 @@ public sealed class EditorSession
         NotifyChanged(flags);
     }
 
+    /// <summary>Zmiana danych albumu / planu taśmy (wpływa na teksty na wszystkich kartach).</summary>
+    public void EditProject(string? key, Action<CardProject> change) =>
+        Edit(key is null ? null : "project:" + key, () => change(Project), ChangeFlags.Visual | ChangeFlags.Project);
+
     public void Undo()
     {
         if (_undo.Count == 0) return;
@@ -112,12 +160,14 @@ public sealed class EditorSession
         SetDirty(true);
     }
 
-    private string Snapshot() => JsonSerializer.Serialize(Doc, ModelJson.Default.CardDocument);
+    private string Snapshot() => JsonSerializer.Serialize(Project, ModelJson.Default.CardProject);
 
     private void Restore(string json)
     {
         var selId = Selected?.Id;
-        Doc = JsonSerializer.Deserialize(json, ModelJson.Default.CardDocument) ?? Doc;
+        Project = JsonSerializer.Deserialize(json, ModelJson.Default.CardProject) ?? Project;
+        Resolver = new TextResolver(Project);
+        ActiveIndex = Math.Clamp(ActiveIndex, 0, Project.Cards.Count - 1);
         Selected = Doc.FindElement(selId);
         SelectionChanged?.Invoke();
         Changed?.Invoke(ChangeFlags.All);
@@ -128,17 +178,6 @@ public sealed class EditorSession
         if (IsDirty == dirty) return;
         IsDirty = dirty;
         DirtyChanged?.Invoke();
-    }
-
-    /// <summary>Zastępuje cały dokument (np. zmiana formatu) jako jeden krok cofania.</summary>
-    public void ReplaceDocument(CardDocument doc)
-    {
-        BeginEdit();
-        var selId = Selected?.Id;
-        Doc = doc;
-        Selected = Doc.FindElement(selId);
-        SelectionChanged?.Invoke();
-        Changed?.Invoke(ChangeFlags.All);
     }
 
     // ------------------------------------------------------------------ operacje na elementach
@@ -228,7 +267,7 @@ public sealed class EditorSession
 
     public async Task SaveAsync(string path)
     {
-        var file = new KasetaFile { Card = Doc };
+        var file = new KasetaFile { Project = Project, AppVersion = AppInfo.Version };
         foreach (var id in UsedAssetIds())
         {
             var bytes = Assets.GetBytes(id);
@@ -250,13 +289,33 @@ public sealed class EditorSession
         await using var fs = File.OpenRead(path);
         var file = await JsonSerializer.DeserializeAsync(fs, ModelJson.Default.KasetaFile)
                    ?? throw new InvalidDataException("Pusty plik projektu.");
-        if (file.Card.Panels.Count == 0) throw new InvalidDataException("Plik nie zawiera karty.");
-        var s = new EditorSession(file.Card) { FilePath = path };
+
+        CardProject project;
+        if (file.Project is { Cards.Count: > 0 } p)
+        {
+            project = p;
+        }
+        else if (file.Card is { Panels.Count: > 0 } legacy)
+        {
+            // plik z wersji 1.0: jedna karta, bez danych albumu
+            if (string.IsNullOrEmpty(legacy.Name)) legacy.Name = CardFormats.Get(legacy.FormatId).TabName;
+            project = new CardProject { Cards = [legacy] };
+        }
+        else
+        {
+            throw new InvalidDataException("Plik nie zawiera karty.");
+        }
+
+        foreach (var card in project.Cards)
+            if (string.IsNullOrEmpty(card.Name)) card.Name = CardFormats.Get(card.FormatId).TabName;
+
+        var s = new EditorSession(project) { FilePath = path };
         foreach (var (id, b64) in file.Assets)
             s.Assets.Put(id, Convert.FromBase64String(b64));
         return s;
     }
 
+    /// <summary>Obrazy używane na wszystkich kartach projektu.</summary>
     public IEnumerable<string> UsedAssetIds() =>
-        Doc.Elements.OfType<ImageElement>().Select(i => i.AssetId).Where(id => id.Length > 0).Distinct();
+        Project.Cards.SelectMany(c => c.Elements).OfType<ImageElement>().Select(i => i.AssetId).Where(id => id.Length > 0).Distinct();
 }

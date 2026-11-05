@@ -28,9 +28,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <Product>Kasetownik 9000</Product>
-    <Company>KataPultoza</Company>
-    <Version>1.0.0</Version>
     <Description>Kasetownik 9000 — okładki na kasety magnetofonowe</Description>
   </PropertyGroup>
 

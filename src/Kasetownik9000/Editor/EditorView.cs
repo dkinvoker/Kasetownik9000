@@ -137,7 +137,7 @@ public sealed partial class EditorView : UserControl
             return;
         }
         var doc = _session.Doc;
-        const float ml = 130, mr = 40, mt = 64, mb = 36;
+        const float ml = 130, mr = 40, mt = 92, mb = 36; // u góry miejsce na zakładki kart
         float aw = size.X - ml - mr, ah = size.Y - mt - mb;
         _zoom = Math.Clamp(Math.Min(aw / (float)doc.Width, ah / (float)doc.Height), MinZoom, MaxZoom);
         _pan = new Vector2(ml + (aw - (float)doc.Width * _zoom) / 2, mt + (ah - (float)doc.Height * _zoom) / 2);
@@ -186,7 +186,7 @@ public sealed partial class EditorView : UserControl
         }
 
         ds.Transform = Matrix3x2.CreateScale(_zoom) * Matrix3x2.CreateTranslation(_pan);
-        CardRenderer.DrawCard(ds, doc, s.Assets, highQuality: false);
+        CardRenderer.DrawCard(ds, doc, s.Assets, highQuality: false, s.Resolver);
 
         // strefa spadu przyciemniona — to, co poza linią cięcia
         var card = CardRenderer.CardRect(doc);

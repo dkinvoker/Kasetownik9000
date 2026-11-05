@@ -75,6 +75,9 @@ public sealed partial class MainWindow
             if (!_is3D) ZoomLcd.Text = string.Format(CultureInfo.InvariantCulture, "{0:0}%", CardEditor.ZoomPercent);
         };
         Preview3D.SaveImageRequested += async () => await Save3DImageAsync();
+        Preview3D.SaveGifRequested += async () => await Save3DGifAsync();
+        SetupAddCardMenu();
+        SetupInsertFieldMenu();
         CardEditor.PointerWorldMoved += p => CursorLcd.Text = p is { } w
             ? string.Format(CultureInfo.InvariantCulture, "X {0,6:0.0}   Y {1,6:0.0}  MM", w.X, w.Y)
             : "X  ---.-   Y  ---.-  MM";
@@ -117,6 +120,61 @@ public sealed partial class MainWindow
 
     private static bool Same(double a, double b) => Math.Abs(a - b) < 1e-9;
 
+    private static void SetText(TextBox box, string value)
+    {
+        if (box.Text != value) box.Text = value;
+    }
+
+    // ================================================================== album i pola
+
+    private void AlbumField_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_ui || sender is not TextBox box) return;
+        var a = _session.Project.Album;
+        var text = box.Text;
+        // TextChanged przychodzi asynchronicznie — reaguj tylko na faktyczną zmianę
+        if (ReferenceEquals(box, AlbumTitleBox) && a.Title != text) _session.EditProject("title", p => p.Album.Title = text);
+        else if (ReferenceEquals(box, AlbumArtistBox) && a.Artist != text) _session.EditProject("artist", p => p.Album.Artist = text);
+        else if (ReferenceEquals(box, AlbumYearBox) && a.Year != text) _session.EditProject("year", p => p.Album.Year = text);
+        else if (ReferenceEquals(box, AlbumDateBox) && a.Date != text) _session.EditProject("date", p => p.Album.Date = text);
+        else if (ReferenceEquals(box, AlbumNoteBox) && a.Note != text) _session.EditProject("note", p => p.Album.Note = text);
+    }
+
+    private void SetupInsertFieldMenu()
+    {
+        var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
+        foreach (var field in TextResolver.Fields)
+        {
+            var item = new MenuFlyoutItem { Text = $"{field.Label}   {field.Token}" };
+            item.Click += (_, _) => InsertIntoText(field.Token);
+            menu.Items.Add(item);
+        }
+        InsertFieldButton.Flyout = menu;
+    }
+
+    private void InsertIntoText(string token)
+    {
+        if (_session.Selected is not TextElement) return;
+        int pos = Math.Clamp(TextInput.SelectionStart, 0, TextInput.Text.Length);
+        int len = Math.Clamp(TextInput.SelectionLength, 0, TextInput.Text.Length - pos);
+        TextInput.Text = TextInput.Text.Remove(pos, len).Insert(pos, token);
+        TextInput.SelectionStart = pos + token.Length;
+        TextInput.Focus(FocusState.Programmatic);
+    }
+
+    private void UpdateTapeLcd()
+    {
+        var tape = _session.Project.Tape;
+        int n = tape.Tracks.Count;
+        TapeLcdTop.Text = $"{tape.TapeName}   {n} {(n == 1 ? "UTWÓR" : n is >= 2 and <= 4 ? "UTWORY" : "UTWORÓW")}";
+        double a = TapeMath.SideSeconds(tape, 0), b = TapeMath.SideSeconds(tape, 1), cap = tape.SideCapacitySeconds;
+        TapeLcdSides.Text = $"A {TextResolver.FormatTime(a)}   B {TextResolver.FormatTime(b)}";
+        var over = a > cap || b > cap;
+        TapeLcdSides.Foreground = over
+            ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 92, 52))
+            : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["RetroLcdFgBrush"];
+    }
+
     private static void SetSlider(Slider s, double v)
     {
         if (Math.Abs(s.Value - v) > 1e-6) s.Value = v;
@@ -144,6 +202,13 @@ public sealed partial class MainWindow
         _ui = true;
         try
         {
+            var album = _session.Project.Album;
+            SetText(AlbumTitleBox, album.Title);
+            SetText(AlbumArtistBox, album.Artist);
+            SetText(AlbumYearBox, album.Year);
+            SetText(AlbumDateBox, album.Date);
+            SetText(AlbumNoteBox, album.Note);
+
             var d = _session.Doc;
             int idx = Array.FindIndex(CardFormats.All, f => f.Id == d.FormatId);
             FormatCombo.SelectedIndex = idx;

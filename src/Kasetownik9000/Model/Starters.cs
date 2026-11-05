@@ -21,6 +21,30 @@ public static class Starters
     private const string Ink = "#FF2B2420";
     private const string Cream = "#FFF3E9D2";
 
+    /// <summary>Przykładowe dane albumu pasujące do stylu (teksty na kartach używają pól {tytuł} itd.).</summary>
+    public static AlbumInfo DefaultAlbum(string starterId) => starterId switch
+    {
+        "mixtape" => new AlbumInfo { Title = "Moja składanka", Artist = "różni wykonawcy", Note = "dla: Ciebie ♥" },
+        "minimal" => new AlbumInfo { Title = "Tytuł", Artist = "Wykonawca" },
+        _ => new AlbumInfo(),
+    };
+
+    /// <summary>Nowy projekt: wybrany format + (opcjonalnie) naklejki A/B w tym samym stylu.</summary>
+    public static CardProject CreateProject(string formatId, string starterId, bool withLabels)
+    {
+        var project = new CardProject { Album = DefaultAlbum(starterId), StyleId = starterId };
+        var main = CardFormats.Get(formatId).CreateDocument();
+        Apply(main, starterId);
+        project.Cards.Add(main);
+        if (withLabels && formatId != "labels")
+        {
+            var labels = CardFormats.Get("labels").CreateDocument();
+            Apply(labels, starterId);
+            project.Cards.Add(labels);
+        }
+        return project;
+    }
+
     public static void Apply(CardDocument d, string starterId)
     {
         d.Elements.Clear();
@@ -54,10 +78,10 @@ public static class Starters
         HasStroke = stroke is not null, StrokeColor = stroke ?? Ink, StrokeWidth = strokeWidth,
     };
 
-    public const string TracksA = "STRONA A\n1. Pierwszy utwór\n2. Drugi utwór\n3. Trzeci utwór\n4. Czwarty utwór\n5. Piąty utwór";
-    public const string TracksB = "STRONA B\n1. Szósty utwór\n2. Siódmy utwór\n3. Ósmy utwór\n4. Dziewiąty utwór\n5. Dziesiąty utwór";
+    public const string TracksA = "STRONA A\n{lista A}";
+    public const string TracksB = "STRONA B\n{lista B}";
 
-    private static string Today => DateTime.Now.ToString("dd.MM.yyyy");
+
 
     private static IEnumerable<(PanelDef P, double Top, int LabelIndex)> Panels(CardDocument d)
     {
@@ -81,19 +105,19 @@ public static class Starters
             switch (p.Role)
             {
                 case PanelRole.Front:
-                    els.Add(Text("Tytuł", "Tytuł albumu", 6, top + 7, W - 12, 12, 22, bold: true, spacing: 0.04, upper: true, autoFit: true));
-                    els.Add(Text("Wykonawca", "Wykonawca", 6, top + 19, W - 12, 8, 13, color: "#FF7A3B2E"));
+                    els.Add(Text("Tytuł", "{tytuł}", 6, top + 7, W - 12, 12, 22, bold: true, spacing: 0.04, upper: true, autoFit: true));
+                    els.Add(Text("Wykonawca", "{wykonawca}", 6, top + 19, W - 12, 8, 13, color: "#FF7A3B2E"));
                     els.Add(Stripes("Paski", -b, top + h * 0.58, W + 2 * b, h * 0.2, sunset));
                     els.Add(Text("Opis", "STEREO · TYPE I · NORMAL", 6, top + h - 8.5, 60, 5, 7, spacing: 0.15));
-                    els.Add(Text("Długość", "C-60", W - 26, top + h - 9.5, 20, 6, 11, color: "#FFC8402F", bold: true, align: TextAlign.Right));
+                    els.Add(Text("Długość", "{kaseta}", W - 26, top + h - 9.5, 20, 6, 11, color: "#FFC8402F", bold: true, align: TextAlign.Right));
                     break;
                 case PanelRole.Spine:
                     els.Add(Stripes("Paski grzbietu", W - 14, top, 14 + b, h, sunset, vertical: true));
-                    els.Add(Text("Grzbiet", "Wykonawca · Tytuł albumu", 4, top + 1, W - 22, h - 2, 11, bold: true,
+                    els.Add(Text("Grzbiet", "{wykonawca} · {tytuł}", 4, top + 1, W - 22, h - 2, 11, bold: true,
                         valign: TextVAlign.Middle, spacing: 0.05, upper: true, autoFit: true));
                     break;
                 case PanelRole.Flap:
-                    els.Add(Text("Klapka", $"Nagrano: {Today}\nDolby B NR", 6, top + 1.5, W - 12, h - 3, 8,
+                    els.Add(Text("Klapka", "Nagrano: {data}\nDolby B NR", 6, top + 1.5, W - 12, h - 3, 8,
                         color: "#FF7A3B2E", valign: TextVAlign.Middle));
                     break;
                 case PanelRole.Inner:
@@ -105,7 +129,7 @@ public static class Starters
                     els.Add(Shape("Kółko", ShapeKind.Ellipse, 4, top + 4, 12, 12, "#FFC8402F"));
                     els.Add(Text("Strona", li == 0 ? "A" : li == 1 ? "B" : $"{li + 1}", 4, top + 4, 12, 12, 18, color: Cream,
                         bold: true, align: TextAlign.Center, valign: TextVAlign.Middle));
-                    els.Add(Text("Tytuł", "Tytuł albumu", 19, top + 4, W - 23, 12, 14, bold: true, valign: TextVAlign.Middle, upper: true, autoFit: true));
+                    els.Add(Text("Tytuł", "{tytuł}", 19, top + 4, W - 23, 12, 14, bold: true, valign: TextVAlign.Middle, upper: true, autoFit: true));
                     els.Add(Stripes("Paski", -b, top + h - 12, W + 2 * b, 8, sunset));
                     break;
             }
@@ -124,22 +148,22 @@ public static class Starters
             switch (p.Role)
             {
                 case PanelRole.Front:
-                    els.Add(Text("Tytuł", "Tytuł", 6, top + h * 0.3, W - 12, 14, 26, color: White, align: TextAlign.Center,
+                    els.Add(Text("Tytuł", "{tytuł}", 6, top + h * 0.3, W - 12, 14, 26, color: White, align: TextAlign.Center,
                         valign: TextVAlign.Middle, font: "Bahnschrift Light", spacing: 0.3, upper: true, autoFit: true));
                     els.Add(new ShapeElement
                     {
                         Name = "Linia", Shape = ShapeKind.Line, X = W / 2 - 15, Y = top + h * 0.6, Width = 30, Height = 2,
                         StrokeColor = Accent, StrokeWidth = 0.4, HasFill = false,
                     });
-                    els.Add(Text("Wykonawca", "wykonawca", 6, top + h * 0.64, W - 12, 7, 10, color: Gray,
+                    els.Add(Text("Wykonawca", "{wykonawca}", 6, top + h * 0.64, W - 12, 7, 10, color: Gray,
                         align: TextAlign.Center, spacing: 0.25, upper: true));
                     break;
                 case PanelRole.Spine:
-                    els.Add(Text("Grzbiet", "Wykonawca — Tytuł", 6, top + 1, W - 12, h - 2, 10, color: White,
+                    els.Add(Text("Grzbiet", "{wykonawca} — {tytuł}", 6, top + 1, W - 12, h - 2, 10, color: White,
                         align: TextAlign.Center, valign: TextVAlign.Middle, spacing: 0.2, upper: true, autoFit: true));
                     break;
                 case PanelRole.Flap:
-                    els.Add(Text("Rok", DateTime.Now.Year.ToString(), 6, top + 1, W - 12, h - 2, 8, color: Gray,
+                    els.Add(Text("Rok", "{rok}", 6, top + 1, W - 12, h - 2, 8, color: Gray,
                         align: TextAlign.Center, valign: TextVAlign.Middle, spacing: 0.4));
                     break;
                 case PanelRole.Inner:
@@ -149,7 +173,7 @@ public static class Starters
                 case PanelRole.Label:
                     els.Add(Text("Strona", li == 0 ? "A" : li == 1 ? "B" : $"{li + 1}", 4, top + 4, 14, h - 8, 28, color: Accent,
                         font: "Bahnschrift Light", valign: TextVAlign.Middle));
-                    els.Add(Text("Tytuł", "Tytuł", 20, top + 4, W - 24, h - 8, 12, color: White, valign: TextVAlign.Middle,
+                    els.Add(Text("Tytuł", "{tytuł}", 20, top + 4, W - 24, h - 8, 12, color: White, valign: TextVAlign.Middle,
                         spacing: 0.25, upper: true, autoFit: true));
                     break;
             }
@@ -173,9 +197,9 @@ public static class Starters
                         double hh = (lines - 1) * 6.5 + 0.35;
                         els.Add(Stripes("Linie", -b, top + 14, W + 2 * b, hh, Enumerable.Repeat(Line, lines), gap: 6.5 - 0.35));
                         els.Add(Shape("Margines", ShapeKind.Rectangle, 12, top, 0.4, h, Margin));
-                        els.Add(Text("Tytuł", "Moja składanka", 16, top + 3, W - 20, 11, 22, color: Pen, font: Hand, bold: true, autoFit: true));
-                        els.Add(Text("Dla kogo", "dla: Ciebie ♥", 16, top + 15.5, W - 22, 6, 13, color: Pen, font: Hand));
-                        els.Add(Text("Podpis", $"lato {DateTime.Now.Year}", W - 40, top + h - 9, 34, 7, 12, color: Pen, font: Hand, align: TextAlign.Right));
+                        els.Add(Text("Tytuł", "{tytuł}", 16, top + 3, W - 20, 11, 22, color: Pen, font: Hand, bold: true, autoFit: true));
+                        els.Add(Text("Dla kogo", "{dopisek}", 16, top + 15.5, W - 22, 6, 13, color: Pen, font: Hand));
+                        els.Add(Text("Podpis", "lato {rok}", W - 40, top + h - 9, 34, 7, 12, color: Pen, font: Hand, align: TextAlign.Right));
                         break;
                     }
                 case PanelRole.Inner:
@@ -185,7 +209,7 @@ public static class Starters
                     els.Add(Text("Strona B", TracksB, W / 2 + 2, top + 9, W / 2 - 6, h - 13, 11, color: Pen, font: Hand, autoFit: true));
                     break;
                 case PanelRole.Spine:
-                    els.Add(Text("Grzbiet", $"Składanka ♥ {DateTime.Now.Year}", 6, top + 0.5, W - 12, h - 1, 14, color: Pen, font: Hand,
+                    els.Add(Text("Grzbiet", "{tytuł} ♥ {rok}", 6, top + 0.5, W - 12, h - 1, 14, color: Pen, font: Hand,
                         bold: true, align: TextAlign.Center, valign: TextVAlign.Middle, autoFit: true));
                     break;
                 case PanelRole.Flap:
@@ -195,7 +219,7 @@ public static class Starters
                 case PanelRole.Label:
                     els.Add(Stripes("Linie", -b, top + 13, W + 2 * b, 19.4, Enumerable.Repeat(Line, 4), gap: 6));
                     els.Add(Text("Strona", li == 0 ? "A" : li == 1 ? "B" : $"{li + 1}", 4, top + 2, 12, 12, 24, color: Margin, font: Hand, bold: true));
-                    els.Add(Text("Tytuł", "Składanka", 18, top + 3, W - 22, 10, 18, color: Pen, font: Hand, bold: true, autoFit: true));
+                    els.Add(Text("Tytuł", "{tytuł}", 18, top + 3, W - 22, 10, 18, color: Pen, font: Hand, bold: true, autoFit: true));
                     break;
             }
         }

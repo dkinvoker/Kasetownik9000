@@ -36,7 +36,8 @@ public sealed partial class Preview3DView : UserControl
 
     private readonly CanvasControl _canvas;
     private readonly TextBlock _modeText;
-    private readonly Button _rotateButton, _caseButton;
+    private readonly Button _rotateButton, _caseButton, _cardButton;
+    private bool _showCard = true;
     private readonly Brush _keyBrush, _accentBrush, _creamBrush, _darkBrush;
 
     private EditorSession? _session;
@@ -51,6 +52,7 @@ public sealed partial class Preview3DView : UserControl
     private float _yaw0, _pitch0;
 
     public event Action? SaveImageRequested;
+    public event Action? SaveGifRequested;
 
     public Preview3DView()
     {
@@ -99,16 +101,19 @@ public sealed partial class Preview3DView : UserControl
         bar.Children.Add(new Microsoft.UI.Xaml.Shapes.Rectangle { Width = 1, Margin = new Thickness(6, 6, 6, 9), Fill = (Brush)res["RetroLineBrush"] });
         _rotateButton = Key("OBRACAJ", ToggleAutoRotate, "Powolny automatyczny obrót");
         _caseButton = Key("PUDEŁKO", ToggleCase, "Pokaż / ukryj plastikowe pudełko");
+        _cardButton = Key("OKŁADKA", ToggleCard, "Pokaż / ukryj J-kartę (widać wtedy kasetę i jej naklejki)");
         bar.Children.Add(_rotateButton);
         bar.Children.Add(_caseButton);
+        bar.Children.Add(_cardButton);
         bar.Children.Add(new Microsoft.UI.Xaml.Shapes.Rectangle { Width = 1, Margin = new Thickness(6, 6, 6, 9), Fill = (Brush)res["RetroLineBrush"] });
-        var save = Key("ZAPISZ OBRAZ", () => SaveImageRequested?.Invoke(), "Zapisz ten widok jako obraz PNG (np. do pokazania znajomym)");
-        bar.Children.Add(save);
+        bar.Children.Add(Key("ZAPISZ OBRAZ", () => SaveImageRequested?.Invoke(), "Zapisz ten widok jako obraz PNG (np. do pokazania znajomym)"));
+        bar.Children.Add(Key("ZAPISZ GIF", () => SaveGifRequested?.Invoke(), "Zapisz animację obracającej się kasety (GIF) — w sam raz na Instagram czy Discorda"));
         root.Children.Add(bar);
 
         Content = root;
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
         SetKeyActive(_caseButton, _showCase);
+        SetKeyActive(_cardButton, _showCard);
         Unloaded += (_, _) => UnhookRendering();
     }
 
@@ -214,8 +219,9 @@ public sealed partial class Preview3DView : UserControl
     }
 
     /// <summary>Ustawia kamerę bez animacji (np. do eksportu z linii poleceń).</summary>
-    public void SetView(float yaw, float pitch, float zoom = 1, bool? showCase = null)
+    public void SetView(float yaw, float pitch, float zoom = 1, bool? showCase = null, bool? showCard = null)
     {
+        if (showCard is { } scd) { _showCard = scd; SetKeyActive(_cardButton, scd); }
         _yaw = Wrap(yaw);
         _pitch = Wrap(pitch);
         _zoom = Math.Clamp(zoom, 0.4f, 4f);
@@ -253,6 +259,13 @@ public sealed partial class Preview3DView : UserControl
         _autoRotate = !_autoRotate;
         SetKeyActive(_rotateButton, _autoRotate);
         if (_autoRotate) { _animating = false; HookRendering(); }
+    }
+
+    private void ToggleCard()
+    {
+        _showCard = !_showCard;
+        SetKeyActive(_cardButton, _showCard);
+        _canvas.Invalidate();
     }
 
     private void ToggleCase()
@@ -358,6 +371,61 @@ public sealed partial class Preview3DView : UserControl
         await rt.SaveAsync(path, CanvasBitmapFileFormat.Png);
     }
 
+    /// <summary>
+    /// Animowany GIF: pełny obrót wokół pionu przy lekkim pochyleniu, startując od bieżącego kąta.
+    /// Klatki renderowane na wątku UI, kodowanie w tle.
+    /// </summary>
+    public async Task ExportGifAsync(string path, int width = 600, int height = 420, int frames = 72, IProgress<double>? progress = null)
+    {
+        if (_dirty || _scene is null)
+        {
+            if (_session is not null) await _session.Assets.EnsureLoadedAsync(_session.UsedAssetIds());
+            Rebuild();
+        }
+
+        float yaw0 = _yaw, pitch0 = _pitch;
+        bool wasRotating = _autoRotate;
+        _autoRotate = false;
+        var shots = new List<byte[]>(frames);
+        try
+        {
+            using var rt = new CanvasRenderTarget(CanvasDevice.GetSharedDevice(), width, height, 96);
+            for (int i = 0; i < frames; i++)
+            {
+                _yaw = Wrap(yaw0 + 360f * i / frames);
+                _pitch = 14;
+                using (var ds = rt.CreateDrawingSession())
+                {
+                    ds.Clear(Color.FromArgb(255, 22, 18, 15));
+                    DrawScene(ds, new Vector2(width, height));
+                }
+                shots.Add(rt.GetPixelBytes());
+                progress?.Report(0.5 * (i + 1) / frames);
+                if (i % 8 == 7) await Task.Yield(); // nie zamrażaj okna
+            }
+        }
+        finally
+        {
+            _yaw = yaw0;
+            _pitch = pitch0;
+            _autoRotate = wasRotating;
+            _canvas.Invalidate();
+        }
+
+        await Task.Run(() =>
+        {
+            var palette = Output.GifEncoder.BuildPalette(shots.Where((_, i) => i % 6 == 0));
+            using var fs = File.Create(path);
+            var gif = new Output.GifEncoder(fs, width, height, palette);
+            for (int i = 0; i < shots.Count; i++)
+            {
+                gif.AddFrame(shots[i], 4); // 4/100 s → 25 kl./s, obrót w ~3 s
+                progress?.Report(0.5 + 0.5 * (i + 1) / shots.Count);
+            }
+            gif.Finish();
+        });
+    }
+
     // ================================================================== scena
 
     private sealed class Face : IDisposable
@@ -418,27 +486,35 @@ public sealed partial class Preview3DView : UserControl
 
     private static Scene BuildScene(EditorSession session)
     {
-        var doc = session.Doc;
+        var project = session.Project;
         var scene = new Scene();
-        int n = doc.Panels.Count;
-        int front = doc.Panels.FindIndex(p => p.Role == PanelRole.Front);
-        var labels = Enumerable.Range(0, n).Where(i => doc.Panels[i].Role == PanelRole.Label).ToList();
+
+        // karta z przodem (J-card) i karta z naklejkami — z całego projektu, niezależnie od aktywnej zakładki
+        var jcard = project.Cards.FirstOrDefault(c => c.HasRole(PanelRole.Front))
+                    ?? project.Cards.FirstOrDefault(c => !c.HasRole(PanelRole.Label));
+        var labelCard = project.Cards.FirstOrDefault(c => c.HasRole(PanelRole.Label));
+        var labels = labelCard is null ? [] : Enumerable.Range(0, labelCard.Panels.Count).Where(i => labelCard.Panels[i].Role == PanelRole.Label).ToList();
 
         CanvasRenderTarget? labelA = null, labelB = null;
-        float cw = CassW, ch = CassH, ct = CassT;
-
-        if (front < 0 && labels.Count > 0)
+        if (labelCard is not null && labels.Count > 0)
         {
-            // naklejki: sama kaseta z etykietami A/B
+            labelA = RenderPanel(session, labelCard, labels[0]);
+            if (labels.Count > 1) labelB = RenderPanel(session, labelCard, labels[1]);
+        }
+
+        float cw = CassW, ch = CassH, ct = CassT;
+        if (jcard is null)
+        {
+            // same naklejki: kaseta bez okładki
             scene.CassetteOnly = true;
             scene.Title = "KASETA Z NAKLEJKAMI";
-            labelA = RenderPanel(session, labels[0]);
-            if (labels.Count > 1) labelB = RenderPanel(session, labels[1]);
-            scene.CaseSize = new Vector3(110, 69.5f, 17);
+            scene.CaseSize = new Vector3(CassW + 3.6f, CassH + 3.2f, CassT + 2.6f);
         }
         else
         {
-            if (front < 0) front = 0;
+            var doc = jcard;
+            int n = doc.Panels.Count;
+            int front = Math.Max(0, doc.Panels.FindIndex(p => p.Role == PanelRole.Front));
             float W = (float)doc.Width, Hf = (float)doc.Panels[front].Height;
             int spine = front + 1 < n ? front + 1 : -1;
             int back = front + 2 < n ? front + 2 : -1;
@@ -446,27 +522,30 @@ public sealed partial class Preview3DView : UserControl
             float Hb = back >= 0 ? (float)Math.Min(doc.Panels[back].Height, Hf) : 0;
 
             var f = new Face { Origin = new(-W / 2, -Hf / 2, Ds / 2), U = Vector3.UnitX, V = Vector3.UnitY, Normal = Vector3.UnitZ, W = W, H = Hf, Fill = Paper };
-            f.SetTexture(RenderPanel(session, front));
+            f.SetTexture(RenderPanel(session, doc, front));
             scene.Card.Add(f);
             if (spine >= 0)
             {
                 var s = new Face { Origin = new(-W / 2, Hf / 2, Ds / 2), U = Vector3.UnitX, V = -Vector3.UnitZ, Normal = Vector3.UnitY, W = W, H = Ds, Fill = Paper };
-                s.SetTexture(RenderPanel(session, spine));
+                s.SetTexture(RenderPanel(session, doc, spine));
                 scene.Card.Add(s);
             }
             if (back >= 0)
             {
                 var b = new Face { Origin = new(-W / 2, Hf / 2, -Ds / 2), U = Vector3.UnitX, V = -Vector3.UnitY, Normal = -Vector3.UnitZ, W = W, H = Hb, Fill = Paper };
-                b.SetTexture(RenderPanel(session, back, Hb));
+                b.SetTexture(RenderPanel(session, doc, back, Hb));
                 scene.Card.Add(b);
             }
 
             cw = Math.Min(CassW, W - 1);
             ch = Math.Min(CassH, Hf - 1);
             ct = Math.Min(CassT, Ds - 0.8f);
-            scene.CaseSize = new Vector3(Math.Max(W, CassW) + 8.4f, Hf + 4.5f, Ds + 4.3f);
+            // pudełko przylega do karty (ok. 1,2 mm luzu na stronę), jak prawdziwe opakowanie
+            scene.CaseSize = new Vector3(Math.Max(W, CassW) + 2.6f, Hf + 2.4f, Ds + 2.4f);
             bool hiddenInserts = front > 0;
-            scene.Title = (doc.FormatId == "custom" ? "WŁASNY FORMAT" : "J-CARD W PUDEŁKU") + (hiddenInserts ? " · WKŁADKI W ŚRODKU" : "");
+            scene.Title = (doc.FormatId == "custom" ? "WŁASNY FORMAT" : "J-CARD W PUDEŁKU")
+                          + (labelA is not null ? " · Z NAKLEJKAMI" : "")
+                          + (hiddenInserts ? " · WKŁADKI W ŚRODKU" : "");
         }
 
         // kaseta: strona A z przodu, strona B z tyłu (obrócona jak przy przekładaniu kasety)
@@ -483,9 +562,8 @@ public sealed partial class Preview3DView : UserControl
     }
 
     /// <summary>Renderuje jeden panel karty (bez spadu) do tekstury.</summary>
-    private static CanvasRenderTarget RenderPanel(EditorSession session, int index, double? heightOverride = null)
+    private static CanvasRenderTarget RenderPanel(EditorSession session, CardDocument doc, int index, double? heightOverride = null)
     {
-        var doc = session.Doc;
         double top = doc.PanelTop(index);
         double h = heightOverride ?? doc.Panels[index].Height;
         var rt = new CanvasRenderTarget(CanvasDevice.GetSharedDevice(),
@@ -494,7 +572,7 @@ public sealed partial class Preview3DView : UserControl
         ds.Clear(Microsoft.UI.Colors.White);
         ds.TextAntialiasing = CanvasTextAntialiasing.Grayscale;
         ds.Transform = Matrix3x2.CreateScale(TexPxPerMm) * Matrix3x2.CreateTranslation(0, (float)(-top * TexPxPerMm));
-        CardRenderer.DrawCard(ds, doc, session.Assets, highQuality: true);
+        CardRenderer.DrawCard(ds, doc, session.Assets, highQuality: true, session.Resolver);
         return rt;
     }
 
@@ -636,8 +714,10 @@ public sealed partial class Preview3DView : UserControl
         if (_showCase)
             foreach (var f in scene.Case.Where(f => !Visible(f))) DrawPlastic(ds, Poly(f), front: false);
 
+        var card = _showCard ? scene.Card : [];
+
         // 2. karta widziana od wewnątrz (niezadrukowany papier)
-        foreach (var f in scene.Card.Where(f => !Visible(f)))
+        foreach (var f in card.Where(f => !Visible(f)))
         {
             using var geo = CanvasGeometry.CreatePolygon(ds, Poly(f));
             ds.FillGeometry(geo, Shade(Paper, 0.75f));
@@ -647,7 +727,7 @@ public sealed partial class Preview3DView : UserControl
         foreach (var f in scene.Cassette.Where(Visible)) DrawFace(ds, f, vps, Light(f), Poly(f));
 
         // 4. karta od zewnątrz
-        foreach (var f in scene.Card.Where(Visible)) DrawFace(ds, f, vps, Light(f), Poly(f));
+        foreach (var f in card.Where(Visible)) DrawFace(ds, f, vps, Light(f), Poly(f));
 
         // 5. przednie ścianki pudełka z odblaskiem
         if (_showCase)
@@ -718,7 +798,7 @@ public sealed partial class Preview3DView : UserControl
 
     private static void DrawLidFrame(CanvasDrawingSession ds, Face f, Func<Vector3, Vector2> project)
     {
-        const float inset = 2.4f;
+        const float inset = 1.5f;
         var o = f.Origin + f.U * inset + f.V * inset;
         float w = f.W - 2 * inset, h = f.H - 2 * inset;
         Vector2[] pts = [project(o), project(o + f.U * w), project(o + f.U * w + f.V * h), project(o + f.V * h)];

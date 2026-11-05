@@ -31,7 +31,8 @@ public static class CardRenderer
         return new Rect(-b, -b, doc.Width + 2 * b, doc.Height + 2 * b);
     }
 
-    public static void DrawCard(CanvasDrawingSession ds, CardDocument doc, AssetStore assets, bool highQuality)
+    /// <param name="fields">Podstawia pola {tytuł} itd.; null = tekst bez zmian.</param>
+    public static void DrawCard(CanvasDrawingSession ds, CardDocument doc, AssetStore assets, bool highQuality, TextResolver? fields)
     {
         var clip = BleedRect(doc);
         using (ds.CreateLayer(1f, clip))
@@ -39,7 +40,7 @@ public static class CardRenderer
             ds.FillRectangle(clip, ColorUtil.Parse(doc.Background, Microsoft.UI.Colors.White));
             foreach (var e in doc.Elements)
             {
-                if (!e.Hidden) DrawElement(ds, e, assets, highQuality);
+                if (!e.Hidden) DrawElement(ds, e, assets, highQuality, fields);
             }
         }
     }
@@ -47,7 +48,7 @@ public static class CardRenderer
     public static Matrix3x2 ElementTransform(CardElement e) =>
         Matrix3x2.CreateRotation((float)(e.Rotation * Math.PI / 180), new Vector2((float)e.CenterX, (float)e.CenterY));
 
-    public static void DrawElement(CanvasDrawingSession ds, CardElement e, AssetStore assets, bool highQuality)
+    public static void DrawElement(CanvasDrawingSession ds, CardElement e, AssetStore assets, bool highQuality, TextResolver? fields)
     {
         var baseT = ds.Transform;
         if (e.Rotation != 0) ds.Transform = ElementTransform(e) * baseT;
@@ -56,7 +57,7 @@ public static class CardRenderer
         {
             switch (e)
             {
-                case TextElement t: DrawText(ds, t); break;
+                case TextElement t: DrawText(ds, t, fields); break;
                 case ImageElement i: DrawImage(ds, i, assets, highQuality); break;
                 case ShapeElement s: DrawShape(ds, s); break;
                 case StripesElement st: DrawStripes(ds, st); break;
@@ -71,11 +72,14 @@ public static class CardRenderer
 
     // ------------------------------------------------------------------ tekst
 
-    public static string DisplayText(TextElement t) => t.Uppercase ? t.Text.ToUpperInvariant() : t.Text;
-
-    public static CanvasTextLayout CreateLayout(ICanvasResourceCreator rc, TextElement t, float sizeMm)
+    public static string DisplayText(TextElement t, TextResolver? fields)
     {
-        var text = DisplayText(t);
+        var text = fields?.Resolve(t.Text) ?? t.Text;
+        return t.Uppercase ? text.ToUpperInvariant() : text;
+    }
+
+    public static CanvasTextLayout CreateLayout(ICanvasResourceCreator rc, TextElement t, float sizeMm, string text)
+    {
         using var fmt = new CanvasTextFormat
         {
             FontFamily = string.IsNullOrWhiteSpace(t.FontFamily) ? "Bahnschrift" : t.FontFamily,
@@ -119,11 +123,11 @@ public static class CardRenderer
     }
 
     /// <summary>Rozmiar fontu (mm) po ewentualnym dopasowaniu do ramki.</summary>
-    public static float EffectiveSizeMm(ICanvasResourceCreator rc, TextElement t)
+    public static float EffectiveSizeMm(ICanvasResourceCreator rc, TextElement t, string text)
     {
         float size = (float)(t.FontSize * Units.MmPerPt);
-        if (!t.AutoFit || string.IsNullOrEmpty(t.Text)) return size;
-        using (var full = CreateLayout(rc, t, size))
+        if (!t.AutoFit || string.IsNullOrEmpty(text)) return size;
+        using (var full = CreateLayout(rc, t, size, text))
         {
             if (Fits(full, t)) return size;
         }
@@ -131,17 +135,18 @@ public static class CardRenderer
         for (int i = 0; i < 12; i++)
         {
             float mid = (lo + hi) / 2;
-            using var l = CreateLayout(rc, t, mid);
+            using var l = CreateLayout(rc, t, mid, text);
             if (Fits(l, t)) lo = mid; else hi = mid;
         }
         return lo;
     }
 
-    private static void DrawText(CanvasDrawingSession ds, TextElement t)
+    private static void DrawText(CanvasDrawingSession ds, TextElement t, TextResolver? fields)
     {
-        if (string.IsNullOrEmpty(t.Text)) return;
-        float size = EffectiveSizeMm(ds, t);
-        using var layout = CreateLayout(ds, t, size);
+        var text = DisplayText(t, fields);
+        if (string.IsNullOrEmpty(text)) return;
+        float size = EffectiveSizeMm(ds, t, text);
+        using var layout = CreateLayout(ds, t, size, text);
         float x = (float)t.X, y = (float)t.Y;
         if (t.Shadow)
         {
