@@ -329,8 +329,15 @@ public sealed partial class MainWindow
     private void RefreshProperties()
     {
         var e = _session.Selected;
-        DocSection.Visibility = e is null ? Visibility.Visible : Visibility.Collapsed;
+        bool multi = _session.Selection.Count > 1;
+        DocSection.Visibility = !_session.HasSelection ? Visibility.Visible : Visibility.Collapsed;
         ElementSection.Visibility = e is null ? Visibility.Collapsed : Visibility.Visible;
+        MultiSection.Visibility = multi ? Visibility.Visible : Visibility.Collapsed;
+        if (multi)
+        {
+            RefreshMultiPanel();
+            return;
+        }
         if (e is null)
         {
             RefreshDocPanel();
@@ -519,16 +526,36 @@ public sealed partial class MainWindow
     private void LockToggle_Click(object sender, RoutedEventArgs e) =>
         Edit<CardElement>(null, el => el.Locked = LockToggle.IsChecked == true, ChangeFlags.Visual | ChangeFlags.Layers);
 
-    private void CenterH_Click(object sender, RoutedEventArgs e) =>
+    private void CenterH_Click(object sender, RoutedEventArgs e)
+    {
+        if (_session.Selection.Count > 1)
+        {
+            // kilka elementów: całość (wspólna ramka) na środek karty
+            var movable = _session.MovableSelection();
+            var b = ElementOps.Bounds(movable);
+            _session.Edit(null, () => ElementOps.Translate(movable, _session.Doc.Width / 2 - b.CenterX, 0));
+            return;
+        }
         Edit<CardElement>(null, el => el.X = Math.Round((_session.Doc.Width - el.Width) / 2, 2), ChangeFlags.Visual | ChangeFlags.Properties);
+    }
 
-    private void CenterV_Click(object sender, RoutedEventArgs e) =>
+    private void CenterV_Click(object sender, RoutedEventArgs e)
+    {
+        var d = _session.Doc;
+        if (_session.Selection.Count > 1)
+        {
+            var movable = _session.MovableSelection();
+            var b = ElementOps.Bounds(movable);
+            int pi = d.PanelIndexAt(b.CenterY);
+            _session.Edit(null, () => ElementOps.Translate(movable, 0, d.PanelTop(pi) + d.Panels[pi].Height / 2 - b.CenterY));
+            return;
+        }
         Edit<CardElement>(null, el =>
         {
-            var d = _session.Doc;
             int pi = d.PanelIndexAt(el.CenterY);
             el.Y = Math.Round(d.PanelTop(pi) + (d.Panels[pi].Height - el.Height) / 2, 2);
         }, ChangeFlags.Visual | ChangeFlags.Properties);
+    }
 
     private void FillPanel_Click(object sender, RoutedEventArgs e) =>
         Edit<CardElement>(null, el =>
@@ -633,6 +660,39 @@ public sealed partial class MainWindow
         var loaded = await LoadImageAsync(path);
         if (loaded is null || _session.Selected is not ImageElement) return;
         Edit<ImageElement>(null, i => i.AssetId = loaded.Value.Id);
+    }
+
+    // ================================================================== kilka elementów / grupa
+
+    private static string ElementsWord(int n) =>
+        n == 1 ? "element" : (n % 10 is >= 2 and <= 4 && n % 100 is < 12 or > 14) ? "elementy" : "elementów";
+
+    private void RefreshMultiPanel()
+    {
+        bool old = _ui;
+        _ui = true;
+        try
+        {
+            var sel = _session.Selection;
+            var group = _session.SelectedGroup;
+            int locked = sel.Count(x => x.Locked);
+            MultiHeader.Text = group is null ? "Zaznaczenie" : "Grupa";
+            MultiInfo.Text = $"Zaznaczono {sel.Count} {ElementsWord(sel.Count)}" +
+                             (locked > 0 ? $" (zablokowane: {locked} — nie przesuwają się)" : "") + ".";
+            GroupNamePanel.Visibility = group is null ? Visibility.Collapsed : Visibility.Visible;
+            if (group is not null && GroupNameBox.Text != group.Name) GroupNameBox.Text = group.Name;
+            GroupButton.IsEnabled = group is null;
+            UngroupButton.IsEnabled = sel.Any(x => x.GroupId is not null);
+            int units = ElementOps.Units(_session.Doc, sel).Count;
+            DistributeHButton.IsEnabled = DistributeVButton.IsEnabled = units >= 3;
+        }
+        finally { _ui = old; }
+    }
+
+    private void GroupName_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_ui || _session.SelectedGroup is not { } g || string.IsNullOrWhiteSpace(GroupNameBox.Text)) return;
+        _session.RenameGroup(g, GroupNameBox.Text.Trim());
     }
 
     private void InsideFlip_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -3,6 +3,32 @@
 Numer wersji jest w jednym miejscu: `src/Directory.Build.props` (`<Version>`).
 Widać go na pasku tytułu aplikacji, w oknie „?” i we właściwościach pliku exe.
 
+## 1.9 — 2026-11-07
+
+### Nowe
+- **Zaznaczanie kilku elementów naraz.** Shift/Ctrl + klik dodaje element do zaznaczenia albo go usuwa,
+  przeciągnięcie po pustym miejscu zaznacza prostokątem (z Shift/Ctrl — dokłada do zaznaczenia), Ctrl+A zaznacza
+  wszystko, a na liście warstw działa Ctrl/Shift + klik. Zaznaczone elementy:
+  - przesuwają się razem (myszką i strzałkami, z przyciąganiem całej ramki),
+  - skalują się razem za narożniki wspólnej ramki — razem z czcionkami, grubością linii i zaokrągleniami,
+  - obracają się razem wokół wspólnego środka (Shift — co 15°),
+  - kopiują się, wklejają, duplikują, usuwają, blokują i ukrywają jednym ruchem.
+- **Wyrównywanie do siebie** (lewa/prawa krawędź, góra/dół, środki) i **równe odstępy** w poziomie i w pionie —
+  w nowym panelu „Zaznaczenie”. Całość można też wyśrodkować na karcie.
+- **Grupy** (Ctrl+G, rozgrupowanie Ctrl+Shift+G). Klik na element grupy zaznacza całą grupę, nad ramką widać jej
+  nazwę (do zmiany w panelu), a na liście warstw grupa ma swój wiersz z wciętymi elementami. Dwuklik w grupie
+  wybiera jeden jej element (np. żeby zmienić tekst). Grupa zawsze leży w jednym miejscu stosu warstw;
+  kopia całej grupy dostaje nową grupę „… (kopia)”.
+- **Testy jednostkowe** (`src/Kasetownik9000.Tests`, `dotnet test`): 132 testy logiki — formaty i wszystkie style
+  (m.in. czy napisy na naklejkach omijają okienko), wnętrza i kierunek odwracania, rozkład kart na arkuszu
+  i druk dwustronny, grupy, kolejność warstw, wyrównywanie, skalowanie, pliki z poprzednich wersji, pola {…},
+  kalkulator taśmy, dekodowanie schowka.
+
+### Zmiany
+- Przeciągnięcie po pustym miejscu płótna zaznacza teraz prostokątem zamiast przesuwać widok. Widok przesuwa
+  się spacją + przeciągnięciem albo środkowym przyciskiem myszy (jak dotąd) i kółkiem.
+- Skróty z Ctrl i Delete działają także wtedy, gdy kursor jest na liście warstw.
+
 ## 1.8 — 2026-11-06
 
 ### Nowe

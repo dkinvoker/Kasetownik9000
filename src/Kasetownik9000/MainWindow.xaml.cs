@@ -290,7 +290,7 @@ public sealed partial class MainWindow : Window
     {
         UndoButton.IsEnabled = _session.CanUndo;
         RedoButton.IsEnabled = _session.CanRedo;
-        bool sel = _session.Selected is not null;
+        bool sel = _session.HasSelection;
         LayerUpButton.IsEnabled = LayerDownButton.IsEnabled = LayerLockButton.IsEnabled =
             LayerHideButton.IsEnabled = LayerDeleteButton.IsEnabled = sel;
     }
@@ -310,16 +310,26 @@ public sealed partial class MainWindow : Window
 
     // ================================================================== warstwy
 
+    /// <summary>Lista warstw od góry: grupa to nagłówek z wciętymi elementami (elementy grupy zawsze leżą obok siebie).</summary>
     private void RebuildLayers()
     {
         _ui = true;
         try
         {
+            var doc = _session.Doc;
             var items = new List<LayerItem>();
-            var els = _session.Doc.Elements;
-            for (int i = els.Count - 1; i >= 0; i--) items.Add(new LayerItem(els[i]));
+            var els = doc.Elements;
+            string? currentGroup = null;
+            for (int i = els.Count - 1; i >= 0; i--)
+            {
+                var e = els[i];
+                if (e.GroupId is not null && e.GroupId != currentGroup && doc.FindGroup(e.GroupId) is { } g)
+                    items.Add(LayerItem.ForGroup(g, ElementOps.GroupMembers(doc, e)));
+                currentGroup = e.GroupId;
+                items.Add(LayerItem.ForElement(e, e.GroupId is not null));
+            }
             LayersList.ItemsSource = items;
-            SelectLayerItem(items);
+            SelectLayerItems(items);
         }
         finally { _ui = false; }
     }
@@ -328,21 +338,35 @@ public sealed partial class MainWindow : Window
     {
         if (LayersList.ItemsSource is not List<LayerItem> items) return;
         _ui = true;
-        try { SelectLayerItem(items); }
+        try { SelectLayerItems(items); }
         finally { _ui = false; }
     }
 
-    private void SelectLayerItem(List<LayerItem> items)
+    /// <summary>Zaznacza wiersze zaznaczonych elementów (i nagłówki grup zaznaczonych w całości).</summary>
+    private void SelectLayerItems(List<LayerItem> items)
     {
-        var item = items.FirstOrDefault(i => ReferenceEquals(i.Element, _session.Selected));
-        LayersList.SelectedItem = item;
-        if (item is not null) LayersList.ScrollIntoView(item);
+        var selected = items.Where(i => i.Members.All(_session.IsSelected) && i.Members.Count > 0).ToList();
+        var current = LayersList.SelectedItems.Cast<LayerItem>().ToList();
+        if (current.Count == selected.Count && current.All(selected.Contains)) return;
+        LayersList.SelectedItems.Clear();
+        foreach (var item in selected) LayersList.SelectedItems.Add(item);
+        if (selected.Count > 0) LayersList.ScrollIntoView(selected[0]);
     }
 
+    /// <summary>
+    /// Ctrl/Shift na liście warstw zaznacza kilka pozycji. Liczy się to, co doszło i co ubyło —
+    /// nagłówek grupy dodaje/usuwa całą grupę, wiersz elementu tylko ten element.
+    /// </summary>
     private void Layers_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_ui) return;
-        _session.Select((LayersList.SelectedItem as LayerItem)?.Element);
+        var next = _session.Selection.ToList();
+        foreach (var item in e.RemovedItems.OfType<LayerItem>()) next.RemoveAll(m => item.Members.Contains(m));
+        foreach (var item in e.AddedItems.OfType<LayerItem>())
+            foreach (var m in item.Members)
+                if (!next.Contains(m)) next.Add(m);
+        _session.SetSelection(next);
+        SyncLayerSelection();
     }
 
     // ================================================================== dodawanie elementów
@@ -500,16 +524,33 @@ public sealed partial class MainWindow : Window
 
     private void Delete_Click(object sender, RoutedEventArgs e) => _session.DeleteSelected();
     private void Duplicate_Click(object sender, RoutedEventArgs e) => _session.DuplicateSelected();
-    private void Forward_Click(object sender, RoutedEventArgs e) => _session.Reorder(EditorSession.Order.Forward);
-    private void Backward_Click(object sender, RoutedEventArgs e) => _session.Reorder(EditorSession.Order.Backward);
-    private void BringToFront_Click(object sender, RoutedEventArgs e) => _session.Reorder(EditorSession.Order.Front);
-    private void SendToBack_Click(object sender, RoutedEventArgs e) => _session.Reorder(EditorSession.Order.Back);
+    private void Forward_Click(object sender, RoutedEventArgs e) => _session.Reorder(LayerOrder.Forward);
+    private void Backward_Click(object sender, RoutedEventArgs e) => _session.Reorder(LayerOrder.Backward);
+    private void BringToFront_Click(object sender, RoutedEventArgs e) => _session.Reorder(LayerOrder.Front);
+    private void SendToBack_Click(object sender, RoutedEventArgs e) => _session.Reorder(LayerOrder.Back);
 
-    private void ToggleLock_Click(object sender, RoutedEventArgs e) =>
-        Edit<CardElement>(null, el => el.Locked = !el.Locked, ChangeFlags.Visual | ChangeFlags.Layers | ChangeFlags.Properties);
+    /// <summary>Blokada wszystkich zaznaczonych: jeśli któryś jest odblokowany — zablokuj wszystkie, inaczej odblokuj.</summary>
+    private void ToggleLock_Click(object sender, RoutedEventArgs e)
+    {
+        bool lockAll = _session.Selection.Any(el => !el.Locked);
+        _session.EditSelection(null, el => el.Locked = lockAll, ChangeFlags.Visual | ChangeFlags.Layers | ChangeFlags.Properties);
+    }
 
-    private void ToggleHide_Click(object sender, RoutedEventArgs e) =>
-        Edit<CardElement>(null, el => el.Hidden = !el.Hidden, ChangeFlags.Visual | ChangeFlags.Layers | ChangeFlags.Properties);
+    private void ToggleHide_Click(object sender, RoutedEventArgs e)
+    {
+        bool hideAll = _session.Selection.Any(el => !el.Hidden);
+        _session.EditSelection(null, el => el.Hidden = hideAll, ChangeFlags.Visual | ChangeFlags.Layers | ChangeFlags.Properties);
+    }
+
+    private void Group_Click(object sender, RoutedEventArgs e) => _session.GroupSelected();
+    private void Ungroup_Click(object sender, RoutedEventArgs e) => _session.UngroupSelected();
+    private void DistributeH_Click(object sender, RoutedEventArgs e) => _session.DistributeSelected(horizontal: true);
+    private void DistributeV_Click(object sender, RoutedEventArgs e) => _session.DistributeSelected(horizontal: false);
+
+    private void Align_Multi_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string tag } && Enum.TryParse<AlignMode>(tag, out var mode)) _session.AlignSelected(mode);
+    }
 
     // ================================================================== klawiatura
 
@@ -521,7 +562,11 @@ public sealed partial class MainWindow : Window
         if (_dialogOpen) return;
         bool ctrl = IsDown(VirtualKey.Control), shift = IsDown(VirtualKey.Shift);
         var focused = FocusManager.GetFocusedElement(RootHost.XamlRoot);
-        bool typing = focused is TextBox or PasswordBox or AutoSuggestBox or ComboBox or Slider or ListViewItem;
+        // w polach tekstowych skróty należą do pola; na liście warstw działają skróty z Ctrl i Delete,
+        // ale strzałki przesuwają po liście, a nie elementy
+        bool textInput = focused is TextBox or PasswordBox or AutoSuggestBox;
+        bool inList = focused is ListViewItem;
+        bool typing = textInput || focused is ComboBox or Slider || inList;
 
         if (e.Key == VirtualKey.F3 || (_is3D && e.Key == VirtualKey.Escape && !typing))
         {
@@ -544,13 +589,16 @@ public sealed partial class MainWindow : Window
                 case VirtualKey.Add or (VirtualKey)187: e.Handled = true; ZoomBy(1.25f); return;
                 case VirtualKey.Subtract or (VirtualKey)189: e.Handled = true; ZoomBy(0.8f); return;
             }
-            if (typing) return;
+            if (typing && !inList) return;
             switch (e.Key)
             {
                 case VirtualKey.Z when shift: _session.Redo(); break;
                 case VirtualKey.Z: _session.Undo(); break;
                 case VirtualKey.Y: _session.Redo(); break;
                 case VirtualKey.D: _session.DuplicateSelected(); break;
+                case VirtualKey.A: _session.SelectAll(); break;
+                case VirtualKey.G when shift: _session.UngroupSelected(); break;
+                case VirtualKey.G: _session.GroupSelected(); break;
                 case VirtualKey.C: e.Handled = true; await CopySelectedAsync(); return;
                 case VirtualKey.X: e.Handled = true; if (await CopySelectedAsync()) _session.DeleteSelected(); return;
                 case VirtualKey.V: e.Handled = true; await PasteAsync(null); return;
@@ -560,11 +608,17 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        if (inList && e.Key == VirtualKey.Delete && _session.HasSelection)
+        {
+            e.Handled = true;
+            _session.DeleteSelected();
+            return;
+        }
         if (typing) return;
         double step = shift ? 5 : 0.5;
         switch (e.Key)
         {
-            case VirtualKey.Delete or VirtualKey.Back when _session.Selected is not null:
+            case VirtualKey.Delete or VirtualKey.Back when _session.HasSelection:
                 _session.DeleteSelected();
                 break;
             case VirtualKey.Escape:
@@ -579,11 +633,12 @@ public sealed partial class MainWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>Strzałki przesuwają wszystkie zaznaczone (oprócz zablokowanych).</summary>
     private void Nudge(double dx, double dy)
     {
-        if (_session.Selected is null or { Locked: true }) return;
-        Edit<CardElement>("nudge", el => { el.X = Math.Round(el.X + dx, 2); el.Y = Math.Round(el.Y + dy, 2); },
-            ChangeFlags.Visual | ChangeFlags.Properties);
+        var movable = _session.MovableSelection();
+        if (movable.Count == 0) return;
+        _session.Edit("nudge", () => ElementOps.Translate(movable, dx, dy), ChangeFlags.Visual | ChangeFlags.Properties);
     }
 
     // ================================================================== menu kontekstowe
@@ -605,12 +660,18 @@ public sealed partial class MainWindow : Window
             Add("Kopiuj", "", "Ctrl+C", async () => await CopySelectedAsync());
             Add("Usuń", "", "Del", _session.DeleteSelected);
             menu.Items.Add(new MenuFlyoutSeparator());
-            Add("Na wierzch", "", null, () => _session.Reorder(EditorSession.Order.Front));
-            Add("Wyżej", "", null, () => _session.Reorder(EditorSession.Order.Forward));
-            Add("Niżej", "", null, () => _session.Reorder(EditorSession.Order.Backward));
-            Add("Na spód", "", null, () => _session.Reorder(EditorSession.Order.Back));
+            Add("Na wierzch", "", null, () => _session.Reorder(LayerOrder.Front));
+            Add("Wyżej", "", null, () => _session.Reorder(LayerOrder.Forward));
+            Add("Niżej", "", null, () => _session.Reorder(LayerOrder.Backward));
+            Add("Na spód", "", null, () => _session.Reorder(LayerOrder.Back));
             menu.Items.Add(new MenuFlyoutSeparator());
-            if (hit is ImageElement)
+            if (_session.Selection.Count > 1)
+                Add("Grupuj", "", "Ctrl+G", _session.GroupSelected);
+            if (_session.Selection.Any(el => el.GroupId is not null))
+                Add("Rozgrupuj", "", "Ctrl+Shift+G", _session.UngroupSelected);
+            if (_session.Selection.Count > 1 || _session.Selection.Any(el => el.GroupId is not null))
+                menu.Items.Add(new MenuFlyoutSeparator());
+            if (hit is ImageElement && _session.Selected is not null)
             {
                 foreach (var (text, symbol, flipX) in new[] { ("Odbij w poziomie", "⇆", true), ("Odbij w pionie", "⇅", false) })
                 {
@@ -620,7 +681,7 @@ public sealed partial class MainWindow : Window
                     menu.Items.Add(item);
                 }
             }
-            Add("Rozciągnij na panel","", null, () => FillPanel_Click(this, new RoutedEventArgs()));
+            if (_session.Selected is not null) Add("Rozciągnij na panel","", null, () => FillPanel_Click(this, new RoutedEventArgs()));
             Add(hit.Locked ? "Odblokuj" : "Zablokuj", hit.Locked ? "" : "", null, () => ToggleLock_Click(this, new RoutedEventArgs()));
             Add("Ukryj", "", null, () => ToggleHide_Click(this, new RoutedEventArgs()));
             menu.Items.Add(new MenuFlyoutSeparator());

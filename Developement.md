@@ -24,8 +24,8 @@ Orientacyjna ilość pracy: **[S]** mała, **[M]** średnia, **[L]** duża.
 - **Przycisk „Losuj styl” [S]:** losowe połączenie palety, układu i czcionek. Dobry sposób na przełamanie
   twórczej blokady.
 - **Własne szablony [S]:** zapisz swój projekt jako styl i używaj go przy kolejnych kasetach.
-- **Wygodniejsza edycja [M]:** zaznaczanie kilku elementów naraz, grupowanie, wyrównywanie względem siebie,
-  gradienty w tłach i kształtach, linijki.
+- **Wygodniejsza edycja [M]:** gradienty w tłach i kształtach, linijki (zaznaczanie kilku elementów, grupy
+  i wyrównywanie są już w 1.9).
 
 ## 🖨️ Druk
 - **Wektorowy PDF [L]:** tekst jako krzywe zamiast obrazu, idealnie ostry nawet w drukarni.

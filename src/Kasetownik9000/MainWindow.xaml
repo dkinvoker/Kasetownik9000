@@ -257,7 +257,7 @@
                             </Grid.RowDefinitions>
                             <controls:SectionHeader Text="Warstwy" />
                             <Border Grid.Row="1" Background="{StaticResource RetroBg0Brush}" CornerRadius="4" BorderBrush="{StaticResource RetroShadowBrush}" BorderThickness="1">
-                                <ListView x:Name="LayersList" SelectionMode="Single" SelectionChanged="Layers_SelectionChanged" Padding="0,4">
+                                <ListView x:Name="LayersList" SelectionMode="Extended" SelectionChanged="Layers_SelectionChanged" Padding="0,4">
                                     <ListView.ItemContainerStyle>
                                         <Style TargetType="ListViewItem">
                                             <Setter Property="MinHeight" Value="32" />
@@ -266,14 +266,14 @@
                                     </ListView.ItemContainerStyle>
                                     <ListView.ItemTemplate>
                                         <DataTemplate x:DataType="local:LayerItem">
-                                            <Grid ColumnSpacing="10">
+                                            <Grid ColumnSpacing="10" Margin="{x:Bind Indent}">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
                                                 <FontIcon Glyph="{x:Bind Glyph}" FontSize="13" Foreground="{StaticResource RetroMustardBrush}" />
-                                                <TextBlock Grid.Column="1" Text="{x:Bind Name}" Opacity="{x:Bind TextOpacity}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{x:Bind Name}" Opacity="{x:Bind TextOpacity}" FontWeight="{x:Bind Weight}" FontSize="13" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                                 <FontIcon Grid.Column="2" Glyph="{x:Bind StateGlyph}" FontSize="11" Opacity="0.7" />
                                             </Grid>
                                         </DataTemplate>
@@ -388,6 +388,137 @@
                                                    Text="Kliknij element na karcie, żeby go edytować. Dodawaj nowe z panelu po lewej, przeciągaj obrazy z Eksploratora, a gdy skończysz — DRUKUJ (w skali 100%) i zegnij kartę wzdłuż przerywanych linii." />
                                     </StackPanel>
                                 </Border>
+                            </StackPanel>
+
+                            <!-- ===== KILKA ELEMENTÓW / GRUPA ===== -->
+                            <StackPanel x:Name="MultiSection" Visibility="Collapsed">
+                                <controls:SectionHeader x:Name="MultiHeader" Text="Zaznaczenie" />
+                                <TextBlock x:Name="MultiInfo" Style="{StaticResource HintTextStyle}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                                <StackPanel x:Name="GroupNamePanel">
+                                    <TextBlock Style="{StaticResource PropLabelStyle}" Text="Nazwa grupy" />
+                                    <TextBox x:Name="GroupNameBox" TextChanged="GroupName_TextChanged" />
+                                </StackPanel>
+                                <Grid ColumnSpacing="6" Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="GroupButton" HorizontalAlignment="Stretch" Click="Group_Click" ToolTipService.ToolTip="Połącz w grupę — zaznacza się i przesuwa razem (Ctrl+G)">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE8B7;" FontSize="13" />
+                                            <TextBlock Text="Grupuj" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button x:Name="UngroupButton" Grid.Column="1" HorizontalAlignment="Stretch" Click="Ungroup_Click" ToolTipService.ToolTip="Rozdziel grupę na osobne elementy (Ctrl+Shift+G)">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE8B7;" FontSize="13" Opacity="0.5" />
+                                            <TextBlock Text="Rozgrupuj" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                                <TextBlock Style="{StaticResource PropLabelStyle}" Text="Wyrównaj do siebie" />
+                                <Grid ColumnSpacing="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Tag="Left" HorizontalAlignment="Stretch" Click="Align_Multi_Click" ToolTipService.ToolTip="Do lewej krawędzi">
+                                        <FontIcon Glyph="&#xE8E4;" FontSize="13" />
+                                    </Button>
+                                    <Button Tag="CenterX" Grid.Column="1" HorizontalAlignment="Stretch" Click="Align_Multi_Click" ToolTipService.ToolTip="Do środka w poziomie">
+                                        <FontIcon Glyph="&#xE8E3;" FontSize="13" />
+                                    </Button>
+                                    <Button Tag="Right" Grid.Column="2" HorizontalAlignment="Stretch" Click="Align_Multi_Click" ToolTipService.ToolTip="Do prawej krawędzi">
+                                        <FontIcon Glyph="&#xE8E2;" FontSize="13" />
+                                    </Button>
+                                    <Button Tag="Top" Grid.Column="3" HorizontalAlignment="Stretch" Click="Align_Multi_Click" ToolTipService.ToolTip="Do górnej krawędzi">
+                                        <FontIcon Glyph="&#xE8E4;" FontSize="13" RenderTransformOrigin="0.5,0.5">
+                                            <FontIcon.RenderTransform>
+                                                <RotateTransform Angle="90" />
+                                            </FontIcon.RenderTransform>
+                                        </FontIcon>
+                                    </Button>
+                                    <Button Tag="CenterY" Grid.Column="4" HorizontalAlignment="Stretch" Click="Align_Multi_Click" ToolTipService.ToolTip="Do środka w pionie">
+                                        <FontIcon Glyph="&#xE8E3;" FontSize="13" RenderTransformOrigin="0.5,0.5">
+                                            <FontIcon.RenderTransform>
+                                                <RotateTransform Angle="90" />
+                                            </FontIcon.RenderTransform>
+                                        </FontIcon>
+                                    </Button>
+                                    <Button Tag="Bottom" Grid.Column="5" HorizontalAlignment="Stretch" Click="Align_Multi_Click" ToolTipService.ToolTip="Do dolnej krawędzi">
+                                        <FontIcon Glyph="&#xE8E2;" FontSize="13" RenderTransformOrigin="0.5,0.5">
+                                            <FontIcon.RenderTransform>
+                                                <RotateTransform Angle="90" />
+                                            </FontIcon.RenderTransform>
+                                        </FontIcon>
+                                    </Button>
+                                </Grid>
+                                <TextBlock Style="{StaticResource PropLabelStyle}" Text="Rozmieść równo (co najmniej 3)" />
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="DistributeHButton" HorizontalAlignment="Stretch" Click="DistributeH_Click" ToolTipService.ToolTip="Równe odstępy w poziomie">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="⇹" FontSize="15" Margin="0,-2,0,0" />
+                                            <TextBlock Text="W poziomie" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button x:Name="DistributeVButton" Grid.Column="1" HorizontalAlignment="Stretch" Click="DistributeV_Click" ToolTipService.ToolTip="Równe odstępy w pionie">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="⤒" FontSize="15" Margin="0,-2,0,0" />
+                                            <TextBlock Text="W pionie" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                                <TextBlock Style="{StaticResource PropLabelStyle}" Text="Układ" />
+                                <Grid ColumnSpacing="4" RowSpacing="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Button HorizontalAlignment="Stretch" Click="CenterH_Click" ToolTipService.ToolTip="Całość na środek karty w poziomie">
+                                        <FontIcon Glyph="&#xE8E3;" FontSize="13" />
+                                    </Button>
+                                    <Button Grid.Column="1" HorizontalAlignment="Stretch" Click="CenterV_Click" ToolTipService.ToolTip="Całość na środek panelu w pionie">
+                                        <FontIcon Glyph="&#xE8E3;" FontSize="13" RenderTransformOrigin="0.5,0.5">
+                                            <FontIcon.RenderTransform>
+                                                <RotateTransform Angle="90" />
+                                            </FontIcon.RenderTransform>
+                                        </FontIcon>
+                                    </Button>
+                                    <Button Grid.Column="2" HorizontalAlignment="Stretch" Click="Duplicate_Click" ToolTipService.ToolTip="Duplikuj (Ctrl+D)">
+                                        <FontIcon Glyph="&#xE8C8;" FontSize="13" />
+                                    </Button>
+                                    <Button Grid.Column="3" HorizontalAlignment="Stretch" Click="ToggleLock_Click" ToolTipService.ToolTip="Zablokuj / odblokuj wszystkie">
+                                        <FontIcon Glyph="&#xE72E;" FontSize="13" />
+                                    </Button>
+                                    <Button Grid.Row="1" HorizontalAlignment="Stretch" Click="BringToFront_Click" ToolTipService.ToolTip="Na wierzch">
+                                        <FontIcon Glyph="&#xE898;" FontSize="13" />
+                                    </Button>
+                                    <Button Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" Click="SendToBack_Click" ToolTipService.ToolTip="Na spód">
+                                        <FontIcon Glyph="&#xE896;" FontSize="13" />
+                                    </Button>
+                                    <Button Grid.Row="1" Grid.Column="2" HorizontalAlignment="Stretch" Click="ToggleHide_Click" ToolTipService.ToolTip="Ukryj / pokaż wszystkie">
+                                        <FontIcon Glyph="&#xE7B3;" FontSize="13" />
+                                    </Button>
+                                    <Button Grid.Row="1" Grid.Column="3" HorizontalAlignment="Stretch" Click="Delete_Click" ToolTipService.ToolTip="Usuń zaznaczone (Del)">
+                                        <FontIcon Glyph="&#xE74D;" FontSize="13" Foreground="#FFE0705E" />
+                                    </Button>
+                                </Grid>
+                                <TextBlock Style="{StaticResource HintTextStyle}" Margin="0,12,0,0" TextWrapping="Wrap"
+                                           Text="Shift/Ctrl + klik — dodaj lub odejmij element · przeciągnij po pustym miejscu — zaznacz prostokątem · narożniki ramki — skalowanie całości · dwuklik w grupie — jeden jej element · Ctrl+A — wszystko." />
                             </StackPanel>
 
                             <!-- ===== ELEMENT ===== -->
@@ -635,7 +766,7 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="StatusText" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource RetroCreamDimBrush}" TextTrimming="CharacterEllipsis"
-                               Text="Przeciągaj elementy myszką · Shift: proporcje / prosto · Alt: bez przyciągania · Ctrl+kółko: zoom · spacja: przesuwanie widoku" />
+                               Text="Przeciągaj elementy myszką · Shift/Ctrl+klik: kilka naraz · przeciągnij po pustym: zaznacz prostokątem · Alt: bez przyciągania · Ctrl+kółko: zoom · spacja: przesuwanie widoku" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <Rectangle Width="18" Height="2" Fill="{StaticResource RetroOrangeBrush}" VerticalAlignment="Center" />

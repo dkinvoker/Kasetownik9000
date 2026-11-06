@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Testy logiki Kasetownika: model (karty, style, wnętrza, grupy, schowek, pola), rozkład kart na arkuszu
+    i druk dwustronny. Pliki aplikacji są kompilowane razem z testami — bez WinUI i Win2D, więc testy
+    nie otwierają okna i działają w kilka sekund:  dotnet test src/Kasetownik9000.Tests
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Kasetownik9000.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Kasetownik9000\Model\**\*.cs" Link="App\Model\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Kasetownik9000\Output\SheetLayout.cs" Link="App\Output\SheetLayout.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Kasetownik9000.Model" />
+  </ItemGroup>
+
+</Project>

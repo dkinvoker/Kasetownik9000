@@ -24,7 +24,7 @@ public enum ChangeFlags
 }
 
 /// <summary>Stan otwartego projektu: karty, dane albumu, obrazy, zaznaczenie, historia cofania.</summary>
-public sealed class EditorSession
+public sealed partial class EditorSession
 {
     private readonly List<string> _undo = [];
     private readonly List<string> _redo = [];
@@ -37,7 +37,6 @@ public sealed class EditorSession
     public AssetStore Assets { get; } = new();
     public string? FilePath { get; set; }
     public bool IsDirty { get; private set; }
-    public CardElement? Selected { get; private set; }
 
     /// <summary>Aktywna (edytowana) karta.</summary>
     public CardDocument Doc => Project.Cards[ActiveIndex];
@@ -64,20 +63,13 @@ public sealed class EditorSession
 
     // ------------------------------------------------------------------ zaznaczenie i karty
 
-    public void Select(CardElement? e)
-    {
-        if (ReferenceEquals(Selected, e)) return;
-        Selected = e;
-        SelectionChanged?.Invoke();
-        Changed?.Invoke(ChangeFlags.Visual | ChangeFlags.Properties);
-    }
 
     public void SelectCard(int index)
     {
         index = Math.Clamp(index, 0, Project.Cards.Count - 1);
         if (index == ActiveIndex) return;
         ActiveIndex = index;
-        Selected = null;
+        _selection.Clear();
         _lastKey = null;
         SelectionChanged?.Invoke();
         Changed?.Invoke(ChangeFlags.All);
@@ -88,7 +80,7 @@ public sealed class EditorSession
         BeginEdit();
         Project.Cards.Add(card);
         ActiveIndex = Project.Cards.Count - 1;
-        Selected = null;
+        _selection.Clear();
         SelectionChanged?.Invoke();
         Changed?.Invoke(ChangeFlags.All);
     }
@@ -106,7 +98,7 @@ public sealed class EditorSession
         foreach (var c in remove) Project.Cards.Remove(c);
         int keep = Project.Cards.IndexOf(active);
         ActiveIndex = keep >= 0 ? keep : Math.Clamp(index - 1, 0, Project.Cards.Count - 1);
-        Selected = null;
+        _selection.Clear();
         SelectionChanged?.Invoke();
         Changed?.Invoke(ChangeFlags.All);
     }
@@ -119,19 +111,7 @@ public sealed class EditorSession
     {
         if (inside.Flip == flip || Project.OuterOf(inside) is not { } outer) return;
         BeginEdit();
-        var oldPanels = inside.Panels;
-        var oldTops = Enumerable.Range(0, oldPanels.Count).Select(inside.PanelTop).ToArray();
-        int n = oldPanels.Count;
-        int ToOuter(int k, InsideFlip f) => f == InsideFlip.TopBottom ? n - 1 - k : k;
-        var oldFlip = inside.Flip;
-        inside.Flip = flip;
-        inside.Panels = CardProject.InsidePanels(outer, flip);
-        foreach (var e in inside.Elements)
-        {
-            int k = inside.PanelIndexAtIn(oldPanels, e.CenterY);
-            int knew = ToOuter(ToOuter(k, oldFlip), flip); // ten sam panel karty zewnętrznej
-            e.Y = inside.PanelTop(knew) + (e.Y - oldTops[k]);
-        }
+        Project.SetInsideFlip(inside, flip);
         Changed?.Invoke(ChangeFlags.All);
     }
 
@@ -154,7 +134,7 @@ public sealed class EditorSession
         BeginEdit();
         Project.Cards.Insert(Project.Cards.IndexOf(outer) + 1, inside);
         ActiveIndex = Project.Cards.IndexOf(inside);
-        Selected = null;
+        _selection.Clear();
         _lastKey = null;
         SelectionChanged?.Invoke();
         Changed?.Invoke(ChangeFlags.All);
@@ -226,11 +206,12 @@ public sealed class EditorSession
 
     private void Restore(string json)
     {
-        var selId = Selected?.Id;
+        var selIds = _selection.Select(e => e.Id).ToList();
         Project = JsonSerializer.Deserialize(json, ModelJson.Default.CardProject) ?? Project;
         Resolver = new TextResolver(Project);
         ActiveIndex = Math.Clamp(ActiveIndex, 0, Project.Cards.Count - 1);
-        Selected = Doc.FindElement(selId);
+        _selection.Clear();
+        foreach (var id in selIds) if (Doc.FindElement(id) is { } el) _selection.Add(el);
         SelectionChanged?.Invoke();
         Changed?.Invoke(ChangeFlags.All);
     }
@@ -256,74 +237,15 @@ public sealed class EditorSession
             if (string.IsNullOrEmpty(e.Name)) e.Name = UniqueName(e.KindName);
             Doc.Elements.Add(e);
         }
-        Selected = elements[0];
+        _selection.Clear();
+        _selection.AddRange(elements);
         SelectionChanged?.Invoke();
         Changed?.Invoke(ChangeFlags.All);
     }
 
-    public string UniqueName(string baseName)
-    {
-        int n = 1;
-        string name;
-        do name = n == 1 ? baseName : $"{baseName} {n}"; while (Doc.Elements.Exists(e => e.Name == name) && ++n < 1000);
-        return name;
-    }
+    public string UniqueName(string baseName) => ElementOps.UniqueName(Doc, baseName);
 
-    public void DeleteSelected()
-    {
-        if (Selected is null) return;
-        BeginEdit();
-        int idx = Doc.Elements.IndexOf(Selected);
-        Doc.Elements.Remove(Selected);
-        Selected = Doc.Elements.Count == 0 ? null : Doc.Elements[Math.Clamp(idx - 1, 0, Doc.Elements.Count - 1)];
-        SelectionChanged?.Invoke();
-        Changed?.Invoke(ChangeFlags.All);
-    }
-
-    public CardElement CloneElement(CardElement e)
-    {
-        var json = JsonSerializer.Serialize(e, ModelJson.Default.CardElement);
-        var copy = JsonSerializer.Deserialize(json, ModelJson.Default.CardElement)!;
-        copy.Id = CardElement.NewId();
-        return copy;
-    }
-
-    public void DuplicateSelected()
-    {
-        if (Selected is null) return;
-        var copy = CloneElement(Selected);
-        copy.X += 3;
-        copy.Y += 3;
-        copy.Locked = false;
-        copy.Name = UniqueName(Selected.Name.Length > 0 ? Selected.Name : copy.KindName);
-        BeginEdit();
-        Doc.Elements.Insert(Doc.Elements.IndexOf(Selected) + 1, copy);
-        Selected = copy;
-        SelectionChanged?.Invoke();
-        Changed?.Invoke(ChangeFlags.All);
-    }
-
-    public enum Order { Front, Forward, Backward, Back }
-
-    public void Reorder(Order order)
-    {
-        var e = Selected;
-        if (e is null) return;
-        var list = Doc.Elements;
-        int i = list.IndexOf(e);
-        int target = order switch
-        {
-            Order.Front => list.Count - 1,
-            Order.Forward => Math.Min(list.Count - 1, i + 1),
-            Order.Backward => Math.Max(0, i - 1),
-            _ => 0,
-        };
-        if (target == i) return;
-        BeginEdit();
-        list.RemoveAt(i);
-        list.Insert(target, e);
-        Changed?.Invoke(ChangeFlags.Visual | ChangeFlags.Layers);
-    }
+    public CardElement CloneElement(CardElement e) => ElementOps.Clone(e);
 
     // ------------------------------------------------------------------ zapis / odczyt
 

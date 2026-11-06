@@ -4,7 +4,7 @@ Aplikacja do projektowania i drukowania okładek na kasety magnetofonowe — J-c
 i naklejki na kasetę — z kalkulatorem taśmy i podglądem 3D. WinUI 3 + Win2D, skompilowana do
 **Native AOT** (okno pojawia się w ułamku sekundy), z wyglądem prosto z magnetofonu z lat 80.
 
-**Wersja 1.8** — co się zmieniało, opisuje [CHANGELOG.md](CHANGELOG.md), a pomysły na dalszy rozwój
+**Wersja 1.9** — co się zmieniało, opisuje [CHANGELOG.md](CHANGELOG.md), a pomysły na dalszy rozwój
 [Developement.md](Developement.md).
 
 ![ikona](src/Kasetownik9000/Assets/AppIcon.png)
@@ -44,6 +44,11 @@ i naklejki na kasetę — z kalkulatorem taśmy i podglądem 3D. WinUI 3 + Win2D
   i w pionie; obrazy są osadzane w pliku projektu. Można je przeciągnąć z Eksploratora albo wkleić ze schowka.
 - **Edycja myszką**: przeciąganie, uchwyty skalowania i obrotu, przyciąganie do krawędzi paneli,
   środka karty i innych elementów (Alt wyłącza), Shift = proporcje / linia prosta / obrót co 15°.
+- **Kilka elementów naraz**: Shift/Ctrl + klik, zaznaczanie prostokątem (przeciągnij po pustym miejscu),
+  Ctrl+A, wybór kilku pozycji na liście warstw. Zaznaczone przesuwa się, skaluje (narożniki wspólnej ramki —
+  razem z czcionkami) i obraca razem; wyrównywanie do siebie (krawędzie, środki) i równe odstępy.
+- **Grupy** (Ctrl+G / Ctrl+Shift+G): elementy grupy zaznaczają się i przesuwają razem, mają nazwę i swój
+  wiersz na liście warstw; dwuklik w grupie wybiera jeden jej element. Grupę można skopiować, wkleić i zduplikować.
 - Warstwy (kolejność, blokada, ukrywanie), cofnij/ponów, kopiuj/wklej (także między oknami — skopiowany
   obraz wkleisz też np. w Paincie), duplikuj.
 - **Druk 1:1** przez systemowe okno drukowania, ze znacznikami cięcia i zgięcia: **cały komplet na jednym
@@ -104,6 +109,13 @@ Wymagania: **.NET 10 SDK** oraz (tylko dla Native AOT) **Visual Studio Build Too
 dotnet build src/Kasetownik9000/Kasetownik9000.csproj
 ```
 
+Testy jednostkowe (logika: karty, style, wnętrza, grupy, rozkład na arkuszu, druk dwustronny, pola, schowek)
+— kilka sekund, bez otwierania okna:
+
+```bash
+dotnet test src/Kasetownik9000.Tests
+```
+
 ```bash
 powershell -ExecutionPolicy Bypass -File publish.ps1
 ```
@@ -139,6 +151,8 @@ dopisywać do PATH. Numer wersji zmienia się w `src/Directory.Build.props`.
 | Ctrl+Z · Ctrl+Y | cofnij · ponów |
 | Ctrl+C / X / V / D | kopiuj / wytnij / wklej / duplikuj |
 | Del · Esc | usuń · odznacz |
+| Ctrl+A · Shift/Ctrl + klik | zaznacz wszystko · dodaj/odejmij element |
+| Ctrl+G · Ctrl+Shift+G | grupuj · rozgrupuj |
 | Strzałki (Shift) | przesuń o 0,5 mm (5 mm) |
 | Ctrl+kółko · Ctrl+0 · Ctrl+1 | zoom · dopasuj · rozmiar rzeczywisty |
 | Spacja + przeciągnij / środkowy przycisk | przesuwanie widoku |
@@ -171,7 +185,7 @@ PDF i druk obejmują cały komplet kart, chyba że podasz `--card N` albo `--fil
 src/Kasetownik9000/
   Model/        projekt i karty, elementy, formaty, okienko naklejki (LabelWindow), style startowe (Starters,
                 StartersMore), pola {…} (TextFields), plan taśmy i import audio (TapeImport),
-                ustawienia (kalibracja) — JSON z generatorem źródeł (AOT)
+                ustawienia (kalibracja), operacje na kilku elementach i grupach (ElementOps) — JSON z generatorem źródeł (AOT)
   Rendering/    CardRenderer (Win2D) — jeden renderer dla ekranu, PNG, PDF, druku i 3D; AssetStore
   Editor/       EditorView (płótno, uchwyty, przyciąganie, zoom), EditorSession (projekt, karty, cofanie),
                 Preview3DView (podgląd 3D: tekstury paneli + Transform3DEffect w perspektywie, eksport GIF)
@@ -180,6 +194,7 @@ src/Kasetownik9000/
   Themes/       Retro.xaml — kolory, klawisze magnetofonu, wyświetlacz LCD
   MainWindow.*  okno: właściwości, pliki i druk, kalkulator taśmy (MainWindow.Tape.cs)
 src/Kasetownik9000.Launcher/   jednoplikowy starter (osadzony zip aplikacji, rozpakowanie raz na wersję)
+src/Kasetownik9000.Tests/      testy jednostkowe (xUnit) — kompilują pliki Model/ i SheetLayout.cs bez WinUI/Win2D
 src/Directory.Build.props      numer wersji
 tools/make-icon.ps1            generator ikony (kaseta) → Assets/AppIcon.ico + .png
 ```

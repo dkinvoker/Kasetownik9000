@@ -411,29 +411,35 @@ public sealed partial class MainWindow
     // ================================================================== schowek
 
     /// <summary>
-    /// Kopiuje zaznaczony element: własny format (JSON z osadzonym obrazem) + tekst albo obraz dla innych programów.
-    /// Własny format zapisujemy jako bajty UTF-8 w strumieniu — po Clipboard.Flush() Windows i tak oddaje go
-    /// jako strumień (a nie string), więc odczyt w PasteAsync obsługuje oba przypadki.
+    /// Kopiuje zaznaczone elementy: własny format (JSON z osadzonymi obrazami i nazwami grup) + tekst albo obraz
+    /// dla innych programów. Własny format zapisujemy jako bajty UTF-8 w strumieniu — po Clipboard.Flush()
+    /// Windows i tak oddaje go jako strumień (a nie string), więc odczyt w PasteAsync obsługuje oba przypadki.
     /// </summary>
     private async Task<bool> CopySelectedAsync()
     {
-        var e = _session.Selected;
-        if (e is null) return false;
-        var payload = new ClipboardPayload { Element = e };
-        byte[]? imageBytes = null;
-        if (e is ImageElement img && _session.Assets.GetBytes(img.AssetId) is { } bytes)
+        var sel = _session.Selection;
+        if (sel.Count == 0) return false;
+        var doc = _session.Doc;
+        var payload = new ClipboardPayload
         {
-            payload.AssetId = img.AssetId;
-            payload.AssetData = Convert.ToBase64String(bytes);
-            imageBytes = bytes;
+            Elements = [.. sel],
+            Assets = [],
+            Groups = [.. doc.Groups.Where(g => sel.Any(e => e.GroupId == g.Id))],
+        };
+        foreach (var img in sel.OfType<ImageElement>())
+        {
+            if (!payload.Assets.ContainsKey(img.AssetId) && _session.Assets.GetBytes(img.AssetId) is { } b)
+                payload.Assets[img.AssetId] = Convert.ToBase64String(b);
         }
+        byte[]? imageBytes = sel is [ImageElement one] ? _session.Assets.GetBytes(one.AssetId) : null;
         try
         {
             var json = JsonSerializer.Serialize(payload, ModelJson.Default.ClipboardPayload);
             var dp = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
             dp.SetData(ClipboardFormat, await ToStreamAsync(System.Text.Encoding.UTF8.GetBytes(json)));
-            if (e is TextElement t) dp.SetText(t.Text);
-            // obraz trafia też jako zwykła bitmapa — da się go wkleić np. w Paincie
+            var texts = sel.OfType<TextElement>().Select(t => t.Text).ToList();
+            if (texts.Count > 0) dp.SetText(string.Join(Environment.NewLine, texts));
+            // pojedynczy obraz trafia też jako zwykła bitmapa — da się go wkleić np. w Paincie
             if (imageBytes is not null) dp.SetBitmap(RandomAccessStreamReference.CreateFromStream(await ToStreamAsync(imageBytes)));
             Clipboard.SetContent(dp);
             Clipboard.Flush();
@@ -445,7 +451,6 @@ public sealed partial class MainWindow
             return false;
         }
     }
-
     private static async Task<InMemoryRandomAccessStream> ToStreamAsync(byte[] bytes)
     {
         var ms = new InMemoryRandomAccessStream();
@@ -475,11 +480,7 @@ public sealed partial class MainWindow
             case byte[] raw: bytes = raw; break;
             default: return null;
         }
-        // JSON zaczyna się od '{' — w UTF-16 drugi bajt to zero
-        var text = bytes.Length >= 2 && bytes[1] == 0
-            ? System.Text.Encoding.Unicode.GetString(bytes)
-            : System.Text.Encoding.UTF8.GetString(bytes);
-        return text.TrimStart('﻿').TrimEnd('\0');
+        return ElementOps.DecodeClipboardText(bytes);
     }
 
     private async Task PasteAsync(Vector2? at)
@@ -490,26 +491,35 @@ public sealed partial class MainWindow
             if (view.Contains(ClipboardFormat) && await ReadClipboardTextAsync(await view.GetDataAsync(ClipboardFormat)) is { Length: > 0 } json)
             {
                 var payload = JsonSerializer.Deserialize(json, ModelJson.Default.ClipboardPayload);
-                if (payload?.Element is { } el)
+                // od 1.9 lista elementów; schowek z wersji 1.8 ma jeden element i jeden obraz
+                var source = payload?.Elements ?? (payload?.Element is { } single ? [single] : null);
+                if (payload is not null && source is { Count: > 0 })
                 {
+                    foreach (var (id, data) in payload.Assets ?? [])
+                        if (_session.Assets.GetBytes(id) is null) _session.Assets.Put(id, Convert.FromBase64String(data));
                     if (payload.AssetId is not null && payload.AssetData is not null && _session.Assets.GetBytes(payload.AssetId) is null)
                         _session.Assets.Put(payload.AssetId, Convert.FromBase64String(payload.AssetData));
-                    var copy = _session.CloneElement(el);
-                    copy.Name = _session.UniqueName(el.Name.Length > 0 ? el.Name : copy.KindName);
-                    copy.Locked = false;
-                    if (at is { } p) { copy.X = p.X - copy.Width / 2; copy.Y = p.Y - copy.Height / 2; }
+
+                    double dx, dy;
+                    if (at is { } p)
+                    {
+                        var box = ElementOps.Bounds(source);
+                        dx = p.X - box.CenterX;
+                        dy = p.Y - box.CenterY;
+                    }
                     else
                     {
                         // jak Ctrl+D: przesunięcie o 3 mm; kolejne wklejenia układają się kaskadą, a nie jedno na drugim
+                        var first = source[0];
+                        dx = dy = 0;
                         int guard = 0;
-                        do { copy.X += 3; copy.Y += 3; }
-                        while (++guard < 30 && _session.Doc.Elements.Exists(o => Math.Abs(o.X - copy.X) < 0.01 && Math.Abs(o.Y - copy.Y) < 0.01));
+                        do { dx += 3; dy += 3; }
+                        while (++guard < 30 && _session.Doc.Elements.Exists(o => Math.Abs(o.X - (first.X + dx)) < 0.01 && Math.Abs(o.Y - (first.Y + dy)) < 0.01));
                     }
-                    _session.AddElement(copy);
+                    _session.PasteElements(source, payload.Groups, dx, dy);
                     return;
                 }
-            }
-            if (view.Contains(StandardDataFormats.Bitmap))
+            }            if (view.Contains(StandardDataFormats.Bitmap))
             {
                 var reference = await view.GetBitmapAsync();
                 using var stream = await reference.OpenReadAsync();

@@ -56,7 +56,11 @@ public sealed partial class EditorView : UserControl
     private Vector2 _pan = new(120, 60);
     private bool _needsFit = true;
 
-    private enum DragMode { None, Move, Resize, Rotate, Pan }
+    /// <summary>
+    /// Move — przesuwanie całego zaznaczenia; Resize/Rotate — uchwyty pojedynczego elementu;
+    /// SetScale/SetRotate — uchwyty wspólnej ramki kilku elementów; Marquee — zaznaczanie prostokątem.
+    /// </summary>
+    private enum DragMode { None, Move, Resize, Rotate, Pan, Marquee, SetScale, SetRotate }
     private DragMode _mode;
     private Vector2 _dragStartScreen, _dragStartWorld, _panStart;
     private double _startX, _startY, _startW, _startH, _startRot;
@@ -205,8 +209,12 @@ public sealed partial class EditorView : UserControl
 
         DrawCardGuides(ds, doc);
         DrawSnapGuides(ds, doc);
-        if (_hover is not null && !ReferenceEquals(_hover, s.Selected) && !_hover.Hidden) DrawOutline(ds, _hover, Color.FromArgb(160, 243, 233, 210), false);
+        // najechanie: obrys elementu (albo całej jego grupy), jeśli nie jest już zaznaczony
+        if (_hover is { Hidden: false } hov && !s.IsSelected(hov))
+            foreach (var m in ElementOps.GroupMembers(doc, hov)) DrawOutline(ds, m, Color.FromArgb(160, 243, 233, 210), false);
         if (s.Selected is { Hidden: false } sel) DrawSelection(ds, sel);
+        else if (s.Selection.Count > 1) DrawMultiSelection(ds, s);
+        if (_mode == DragMode.Marquee) DrawMarquee(ds);
     }
 
     private void DrawMat(CanvasDrawingSession ds, Vector2 size)
@@ -460,8 +468,11 @@ public sealed partial class EditorView : UserControl
 
     // ------------------------------------------------------------------ przyciąganie
 
-    private (List<double> X, List<double> Y) SnapTargets(CardElement moving)
+    private (List<double> X, List<double> Y) SnapTargets(CardElement moving) => SnapTargets([moving]);
+
+    private (List<double> X, List<double> Y) SnapTargets(IReadOnlyCollection<CardElement> movingSet)
     {
+        var moving = movingSet.ToHashSet();
         var doc = _session!.Doc;
         var xs = new List<double> { 0, doc.Width / 2, doc.Width };
         var ys = new List<double> { 0, doc.Height };
@@ -474,7 +485,7 @@ public sealed partial class EditorView : UserControl
         }
         foreach (var e in doc.Elements)
         {
-            if (ReferenceEquals(e, moving) || e.Hidden) continue;
+            if (moving.Contains(e) || e.Hidden) continue;
             var (w, h) = RotatedSize(e);
             xs.Add(e.CenterX - w / 2); xs.Add(e.CenterX); xs.Add(e.CenterX + w / 2);
             ys.Add(e.CenterY - h / 2); ys.Add(e.CenterY); ys.Add(e.CenterY + h / 2);
@@ -501,19 +512,6 @@ public sealed partial class EditorView : UserControl
         return best;
     }
 
-    private void SnapMove(CardElement e, ref double nx, ref double ny)
-    {
-        _guides.Clear();
-        double thr = 6 / _zoom;
-        var (xs, ys) = SnapTargets(e);
-        var (w, h) = RotatedSize(e);
-        double cx = nx + e.Width / 2, cy = ny + e.Height / 2;
-        var dx = BestSnap([cx - w / 2, cx, cx + w / 2], xs, thr, out var gx);
-        if (dx is not null) { nx += dx.Value; _guides.Add((true, gx)); }
-        var dy = BestSnap([cy - h / 2, cy, cy + h / 2], ys, thr, out var gy);
-        if (dy is not null) { ny += dy.Value; _guides.Add((false, gy)); }
-    }
-
     // ------------------------------------------------------------------ wskaźnik
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -538,25 +536,37 @@ public sealed partial class EditorView : UserControl
         if (props.IsRightButtonPressed)
         {
             var hit = s.Selected is { Hidden: false } cur && Contains(cur, world, 2 / _zoom) ? cur : HitTest(world);
-            if (hit is not null) s.Select(hit);
+            // prawy przycisk na zaznaczonym elemencie nie psuje wielokrotnego zaznaczenia
+            if (hit is not null && !s.IsSelected(hit)) s.SelectWithGroup(hit);
             ContextMenuRequested?.Invoke(pt.Position, hit);
             e.Handled = true;
             return;
         }
 
         if (!props.IsLeftButtonPressed) return;
+        var mods = e.KeyModifiers;
+        bool additive = mods.HasFlag(VirtualKeyModifiers.Shift) || mods.HasFlag(VirtualKeyModifiers.Control);
 
-        var sel = s.Selected;
-        if (sel is { Hidden: false, Locked: false })
+        if (!additive)
         {
-            if (HitRotateHandle(sel, pos))
+            // uchwyty: pojedynczy element albo wspólna ramka kilku zaznaczonych
+            var sel = s.Selected;
+            if (sel is { Hidden: false, Locked: false })
             {
-                BeginElementDrag(sel, DragMode.Rotate, e);
-                return;
+                if (HitRotateHandle(sel, pos))
+                {
+                    BeginElementDrag(sel, DragMode.Rotate, e);
+                    return;
+                }
+                if (HitHandle(sel, pos, out _hx, out _hy))
+                {
+                    BeginElementDrag(sel, DragMode.Resize, e);
+                    return;
+                }
             }
-            if (HitHandle(sel, pos, out _hx, out _hy))
+            else if (s.Selection.Count > 1 && SetHandleAt(s, pos) is { } mode)
             {
-                BeginElementDrag(sel, DragMode.Resize, e);
+                BeginSetDrag(s, mode, e);
                 return;
             }
         }
@@ -564,13 +574,20 @@ public sealed partial class EditorView : UserControl
         var target = HitTest(world);
         if (target is not null)
         {
-            s.Select(target);
-            BeginElementDrag(target, DragMode.Move, e);
+            if (additive)
+            {
+                // Shift/Ctrl + klik: dodaj do zaznaczenia albo usuń z niego (całą grupę naraz)
+                s.ToggleWithGroup(target);
+                e.Handled = true;
+                return;
+            }
+            // klik na zaznaczonym — przesuwamy całe zaznaczenie; na innym — zaznacz go (z grupą)
+            if (!s.IsSelected(target)) s.SelectWithGroup(target);
+            BeginSetDrag(s, DragMode.Move, e);
         }
         else
         {
-            s.Select(null);
-            StartPan(e);
+            BeginMarquee(s, world, additive, e);
         }
     }
 
@@ -612,6 +629,29 @@ public sealed partial class EditorView : UserControl
                 _pan = _panStart + (pos - _dragStartScreen);
                 _canvas.Invalidate();
                 return;
+
+            case DragMode.Marquee:
+                UpdateMarquee(s, world);
+                return;
+        }
+
+        if (_mode is DragMode.Move or DragMode.SetScale or DragMode.SetRotate)
+        {
+            if (!_dragEdited)
+            {
+                if (_mode == DragMode.Move && Vector2.Distance(pos, _dragStartScreen) < 3) return;
+                if (_setStart.Count == 0) { _mode = DragMode.None; return; }
+                s.BeginEdit();
+                _dragEdited = true;
+            }
+            switch (_mode)
+            {
+                case DragMode.Move: DoSetMove(world, shift, alt); break;
+                case DragMode.SetScale: DoSetScale(world); break;
+                default: DoSetRotate(world, shift); break;
+            }
+            s.NotifyChanged(ChangeFlags.Visual | ChangeFlags.Properties);
+            return;
         }
 
         var el = s.Selected;
@@ -619,31 +659,12 @@ public sealed partial class EditorView : UserControl
 
         if (!_dragEdited)
         {
-            if (_mode == DragMode.Move && Vector2.Distance(pos, _dragStartScreen) < 3) return;
             s.BeginEdit();
             _dragEdited = true;
         }
 
         switch (_mode)
         {
-            case DragMode.Move:
-                {
-                    var d = world - _dragStartWorld;
-                    double dx = d.X, dy = d.Y;
-                    if (shift)
-                    {
-                        if (Math.Abs(dx) > Math.Abs(dy)) dy = 0; else dx = 0;
-                    }
-                    double nx = _startX + dx, ny = _startY + dy;
-                    if (!alt) SnapMove(el, ref nx, ref ny); else _guides.Clear();
-                    if (shift)
-                    {
-                        if (dy == 0) ny = _startY; else nx = _startX;
-                    }
-                    el.X = Math.Round(nx, 2);
-                    el.Y = Math.Round(ny, 2);
-                    break;
-                }
             case DragMode.Resize:
                 DoResize(el, world, shift || el is ImageElement && _hx != 0 && _hy != 0 && !alt, alt);
                 break;
@@ -732,6 +753,7 @@ public sealed partial class EditorView : UserControl
         if (_mode == DragMode.None) return;
         bool edited = _dragEdited;
         _mode = DragMode.None;
+        _setStart.Clear();
         _dragEdited = false;
         _guides.Clear();
         UpdateCursor(_spaceDown ? InputSystemCursorShape.Hand : InputSystemCursorShape.Arrow);
@@ -747,6 +769,7 @@ public sealed partial class EditorView : UserControl
     {
         var s = _session!;
         if (_spaceDown) { UpdateCursor(InputSystemCursorShape.Hand); return; }
+        if (UpdateSetHoverCursor(s, pos)) return;
         var sel = s.Selected;
         if (sel is { Hidden: false, Locked: false })
         {
@@ -815,7 +838,15 @@ public sealed partial class EditorView : UserControl
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
         var world = ToWorld(e.GetPosition(_canvas).ToVector2());
-        if (_session?.Selected is TextElement t && Contains(t, world, 2 / _zoom)) EditTextRequested?.Invoke(t);
+        var s = _session;
+        if (s is null) return;
+        // dwuklik w grupie: „wejście” do grupy — zaznacza tylko kliknięty element (np. żeby zmienić jego tekst)
+        if (HitTest(world) is { GroupId: not null } member && !ReferenceEquals(s.Selected, member))
+        {
+            s.Select(member);
+            return;
+        }
+        if (s.Selected is TextElement t && Contains(t, world, 2 / _zoom)) EditTextRequested?.Invoke(t);
         else if (HitTest(world) is TextElement t2) EditTextRequested?.Invoke(t2);
     }
 

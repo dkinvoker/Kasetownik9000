@@ -57,6 +57,39 @@ public sealed class CardDocument
     public string Background { get; set; } = "#FFFFFFFF";
     public double Bleed { get; set; } = 1.0;
     public List<CardElement> Elements { get; set; } = [];
+    /// <summary>Grupy elementów (nazwy); przynależność trzyma sam element w <see cref="CardElement.GroupId"/>.</summary>
+    public List<ElementGroup> Groups { get; set; } = [];
+
+    public ElementGroup? FindGroup(string? id) => id is null ? null : Groups.Find(g => g.Id == id);
+
+    /// <summary>
+    /// Porządki po zmianach: grupa z mniej niż dwoma elementami przestaje istnieć, a elementy grupy
+    /// stają obok siebie na liście warstw (na miejscu najwyższego z nich).
+    /// </summary>
+    public void NormalizeGroups()
+    {
+        foreach (var e in Elements)
+        {
+            if (e.GroupId is not null && FindGroup(e.GroupId) is null) e.GroupId = null;
+        }
+        foreach (var g in Groups.ToList())
+        {
+            var members = Elements.Where(e => e.GroupId == g.Id).ToList();
+            if (members.Count < 2)
+            {
+                foreach (var m in members) m.GroupId = null;
+                Groups.Remove(g);
+                continue;
+            }
+            int top = Elements.FindLastIndex(e => e.GroupId == g.Id);
+            int first = Elements.FindIndex(e => e.GroupId == g.Id);
+            if (top - first + 1 == members.Count) continue; // już razem
+            // wszystkie elementy grupy leżą na pozycjach ≤ top, więc po ich wyjęciu to, co było nad grupą,
+            // zaczyna się od top + 1 − liczba elementów — tam wstawiamy całą grupę (na wysokości najwyższego)
+            foreach (var m in members) Elements.Remove(m);
+            Elements.InsertRange(top + 1 - members.Count, members);
+        }
+    }
 
     [JsonIgnore]
     public double Height
@@ -197,6 +230,27 @@ public sealed class CardProject
         return list;
     }
 
+    /// <summary>
+    /// Zmienia kierunek odwracania wnętrza. Panele zmieniają kolejność, a elementy przechodzą razem ze „swoim”
+    /// panelem (to samo miejsce na kartce, w tym samym położeniu w panelu) — teksty zostają czytelne.
+    /// </summary>
+    public void SetInsideFlip(CardDocument inside, InsideFlip flip)
+    {
+        if (inside.Flip == flip || OuterOf(inside) is not { } outer) return;
+        var oldPanels = inside.Panels;
+        var oldTops = Enumerable.Range(0, oldPanels.Count).Select(inside.PanelTop).ToArray();
+        int n = oldPanels.Count;
+        int ToOuter(int k, InsideFlip f) => f == InsideFlip.TopBottom ? n - 1 - k : k;
+        var oldFlip = inside.Flip;
+        inside.Flip = flip;
+        inside.Panels = InsidePanels(outer, flip);
+        foreach (var e in inside.Elements)
+        {
+            int k = inside.PanelIndexAtIn(oldPanels, e.CenterY);
+            int knew = ToOuter(ToOuter(k, oldFlip), flip); // ten sam panel karty zewnętrznej
+            e.Y = inside.PanelTop(knew) + (e.Y - oldTops[k]);
+        }
+    }
     /// <summary>Który panel wnętrza leży za panelem <paramref name="outerIndex"/> karty zewnętrznej.</summary>
     public static int InsidePanelIndex(CardDocument inside, int outerIndex) =>
         inside.Flip == InsideFlip.TopBottom ? inside.Panels.Count - 1 - outerIndex : outerIndex;
@@ -219,6 +273,11 @@ public abstract class CardElement
     public double Opacity { get; set; } = 1;
     public bool Locked { get; set; }
     public bool Hidden { get; set; }
+    /// <summary>
+    /// Grupa, do której należy element (null = bez grupy). Elementy grupy zaznaczają się i przesuwają razem
+    /// i zawsze leżą obok siebie na liście warstw. Nazwy grup są w <see cref="CardDocument.Groups"/>.
+    /// </summary>
+    public string? GroupId { get; set; }
 
     public static string NewId() => Guid.NewGuid().ToString("N")[..12];
 
@@ -321,12 +380,26 @@ public sealed class KasetaFile
     public Dictionary<string, string> Assets { get; set; } = [];
 }
 
-/// <summary>Element skopiowany do schowka (z osadzonym obrazem, jeśli to obraz).</summary>
+/// <summary>Grupa elementów na karcie (nazwa widoczna na liście warstw).</summary>
+public sealed class ElementGroup
+{
+    public string Id { get; set; } = CardElement.NewId();
+    public string Name { get; set; } = "Grupa";
+}
+
+/// <summary>Elementy skopiowane do schowka — z osadzonymi obrazami i nazwami grup.</summary>
 public sealed class ClipboardPayload
 {
+    /// <summary>Pojedynczy element (format z wersji 1.8 i starszych).</summary>
     public CardElement? Element { get; set; }
     public string? AssetId { get; set; }
     public string? AssetData { get; set; }
+
+    /// <summary>Wszystkie skopiowane elementy (od 1.9) — w kolejności warstw, od spodu.</summary>
+    public List<CardElement>? Elements { get; set; }
+    /// <summary>Obrazy użyte przez elementy: id → base64.</summary>
+    public Dictionary<string, string>? Assets { get; set; }
+    public List<ElementGroup>? Groups { get; set; }
 }
 
 [JsonSourceGenerationOptions(

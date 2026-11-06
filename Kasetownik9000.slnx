@@ -2,5 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/Kasetownik9000.Launcher/Kasetownik9000.Launcher.csproj" />
     <Project Path="src/Kasetownik9000/Kasetownik9000.csproj" />
+    <Project Path="src/Kasetownik9000.Tests/Kasetownik9000.Tests.csproj" />
   </Folder>
 </Solution>

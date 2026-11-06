@@ -2,7 +2,7 @@
 
   <!-- Jedno miejsce z numerem wersji dla aplikacji i jednoplikowego startera. Zmiany opisuje CHANGELOG.md. -->
   <PropertyGroup>
-    <Version>1.8.0</Version>
+    <Version>1.9.0</Version>
     <!-- we wĹ‚aĹ›ciwoĹ›ciach pliku sam numer wersji (bez doklejonego hasha commita) -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>Kasetownik 9000</Product>
