@@ -3,6 +3,30 @@
 Numer wersji jest w jednym miejscu: `src/Directory.Build.props` (`<Version>`).
 Widać go na pasku tytułu aplikacji, w oknie „?” i we właściwościach pliku exe.
 
+## 1.8 — 2026-11-06
+
+### Nowe
+- **Dwuklik na pliku `.kaseta` otwiera projekt.** Aplikacja przy starcie sama kojarzy pliki `.kaseta` ze sobą
+  (tylko dla bieżącego użytkownika, bez uprawnień administratora) i daje im ikonę kasety. Z jednoplikowego exe
+  pliki otwiera właśnie ten exe; po przeniesieniu go wystarczy raz go uruchomić. Skrypt odinstalowania usuwa
+  skojarzenie.
+- **Podgląd 3D bez kasety** — klawisz „KASETA” wyjmuje kasetę z pudełka. Od tyłu widać wtedy wnętrze karty
+  (druga strona kartki: teksty, podziękowania) i złożone harmonijką wkładki 4- i 5-panelowej J-karty.
+  Pudełko samo obraca się tyłem, jeśli jest co oglądać. Linia poleceń: `--cassette off`.
+  Ściany karty mają teraz od spodu prawdziwe wnętrze także przy widocznej kasecie.
+- **Podgląd 3D pokazuje kartę z aktywnej zakładki.** Przy kilku wersjach w jednym projekcie (np. J-card
+  i J-card 4-panelowa) w pudełku jest ta, którą wybierzesz — zakładki zostają widoczne także w trybie 3D,
+  a nazwa karty jest na wyświetlaczu. Kliknięcie naklejek zmienia naklejki na kasecie i zostawia oglądaną
+  okładkę (i odwrotnie). Wcześniej zawsze była pierwsza J-karta z listy. W linii poleceń wybiera ją `--card N`.
+
+### Zmiany
+- **Wnętrze karty ogląda się po obróceniu góra ↔ dół.** J-karta obraca się w pudełku na zawiasie przy grzbiecie,
+  więc tak właśnie widać wnętrze przodu po otwarciu pudełka (i tak samo czyta się klapkę z tyłu). W 1.7 wnętrze
+  było odwracane lewa ↔ prawa — po otwarciu pudełka tekst byłby do góry nogami. Nowe wnętrza mają panele
+  w odwrotnej kolejności (klapka u góry, przód na dole), a druk dwustronny uwzględnia to sam.
+  Wnętrza z 1.7 otwierają się bez zmian (lewa ↔ prawa); kierunek zmienisz w panelu karty („Wnętrze ogląda się
+  po obróceniu kartki”) — elementy przechodzą razem ze swoim panelem.
+
 ## 1.7 — 2026-11-06
 
 ### Nowe

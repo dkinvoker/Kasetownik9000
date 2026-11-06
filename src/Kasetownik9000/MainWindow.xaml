@@ -360,6 +360,8 @@
                                 <TextBlock Style="{StaticResource PropLabelStyle}" Text="Format" />
                                 <ComboBox x:Name="FormatCombo" HorizontalAlignment="Stretch" SelectionChanged="FormatCombo_SelectionChanged" />
                                 <TextBlock x:Name="FormatDescription" Style="{StaticResource HintTextStyle}" Margin="0,6,0,0" />
+                                <ComboBox x:Name="InsideFlipCombo" Header="Wnętrze ogląda się po obróceniu kartki" Margin="0,10,0,0"
+                                          HorizontalAlignment="Stretch" Visibility="Collapsed" SelectionChanged="InsideFlip_SelectionChanged" />
                                 <Grid ColumnSpacing="8" Margin="0,10,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />

@@ -251,7 +251,7 @@ public sealed partial class MainWindow : Window
     private void AddInside(CardDocument outer)
     {
         _session.AddInside(outer);
-        ShowToast("Dodano wnętrze: projektuj je tak, jak widać kartkę po odwróceniu (lewa ↔ prawa). " +
+        ShowToast("Dodano wnętrze: projektujesz je tak, jak widać kartkę obróconą góra ↔ dół — jak po otwarciu pudełka. " +
                   "Przy druku trafi na odwrocie karty.", InfoBarSeverity.Informational);
     }
 
@@ -457,7 +457,8 @@ public sealed partial class MainWindow : Window
         CardEditor.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         Preview3D.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         Preview3D.IsActive = on;
-        CardTabsBar.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        // zakładki zostają w 3D — przełączasz nimi, którą wersję okładki (i które naklejki) widać w pudełku
+        AddCardButton.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         View3DLed.Fill = new Microsoft.UI.Xaml.Media.SolidColorBrush(on
             ? Windows.UI.Color.FromArgb(255, 255, 92, 52)
             : Windows.UI.Color.FromArgb(255, 74, 42, 32));

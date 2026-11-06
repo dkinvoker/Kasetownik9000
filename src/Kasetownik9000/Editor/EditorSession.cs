@@ -111,18 +111,44 @@ public sealed class EditorSession
         Changed?.Invoke(ChangeFlags.All);
     }
 
+    /// <summary>
+    /// Zmienia kierunek odwracania wnętrza. Panele zmieniają kolejność, a elementy przechodzą razem ze „swoim”
+    /// panelem (to samo miejsce na kartce, w tym samym położeniu w panelu) — teksty zostają czytelne.
+    /// </summary>
+    public void SetInsideFlip(CardDocument inside, InsideFlip flip)
+    {
+        if (inside.Flip == flip || Project.OuterOf(inside) is not { } outer) return;
+        BeginEdit();
+        var oldPanels = inside.Panels;
+        var oldTops = Enumerable.Range(0, oldPanels.Count).Select(inside.PanelTop).ToArray();
+        int n = oldPanels.Count;
+        int ToOuter(int k, InsideFlip f) => f == InsideFlip.TopBottom ? n - 1 - k : k;
+        var oldFlip = inside.Flip;
+        inside.Flip = flip;
+        inside.Panels = CardProject.InsidePanels(outer, flip);
+        foreach (var e in inside.Elements)
+        {
+            int k = inside.PanelIndexAtIn(oldPanels, e.CenterY);
+            int knew = ToOuter(ToOuter(k, oldFlip), flip); // ten sam panel karty zewnętrznej
+            e.Y = inside.PanelTop(knew) + (e.Y - oldTops[k]);
+        }
+        Changed?.Invoke(ChangeFlags.All);
+    }
+
     /// <summary>Dodaje wnętrze (drugą stronę kartki) karty zewnętrznej — tuż za nią — i przełącza na nie.</summary>
     public void AddInside(CardDocument outer)
     {
         if (!outer.CanHaveInside || Project.InsideOf(outer) is not null) return;
+        // góra ↔ dół: tak widać wnętrze po otwarciu pudełka (J-karta obraca się na zawiasie przy grzbiecie)
         var inside = new CardDocument
         {
             Name = $"{outer.Name} · wnętrze",
             InsideOf = outer.Id,
+            Flip = InsideFlip.TopBottom,
             FormatId = outer.FormatId,
             Width = outer.Width,
             Bleed = outer.Bleed,
-            Panels = [.. outer.Panels.Select(p => p.Clone())],
+            Panels = CardProject.InsidePanels(outer, InsideFlip.TopBottom),
         };
         Starters.ApplyInside(inside, outer);
         BeginEdit();

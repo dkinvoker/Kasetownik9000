@@ -52,6 +52,11 @@ public sealed partial class MainWindow
         BleedBox.SmallChange = 0.5;
 
         FormatCombo.ItemsSource = CardFormats.All.Select(f => f.Name).ToList();
+        InsideFlipCombo.ItemsSource = new List<string>
+        {
+            "Góra ↔ dół (zalecane — jak po otwarciu pudełka)",
+            "Lewa ↔ prawa (tak było w wersji 1.7)",
+        };
         FitCombo.ItemsSource = new List<string> { "Wypełnij ramkę (przytnij)", "Zmieść cały obraz", "Rozciągnij" };
         FilterCombo.ItemsSource = new List<string> { "Bez filtra", "Czarno-biały", "Sepia (retro)" };
         ShapeKindCombo.ItemsSource = new List<string> { "Prostokąt", "Elipsa", "Linia" };
@@ -223,11 +228,12 @@ public sealed partial class MainWindow
             FormatCombo.IsEnabled = CardWidthBox.IsEnabled = BleedBox.IsEnabled = PanelsHost.IsHitTestVisible = structural;
             PanelsHost.Opacity = structural ? 1 : 0.5;
             AddPanelButton.IsEnabled = structural;
+            InsideFlipCombo.Visibility = structural ? Visibility.Collapsed : Visibility.Visible;
             if (!structural)
             {
                 FormatDescription.Text = $"Wnętrze karty „{_session.Project.OuterOf(d)?.Name}” — druga strona tej samej kartki. " +
-                                         "Wymiary i panele zmieniasz na karcie zewnętrznej. Projektuj tak, jak widać kartkę " +
-                                         "po odwróceniu (lewa ↔ prawa).";
+                                         "Wymiary i panele zmieniasz na karcie zewnętrznej.";
+                InsideFlipCombo.SelectedIndex = d.Flip == InsideFlip.TopBottom ? 0 : 1;
             }
         }
         finally { _ui = old; }
@@ -627,6 +633,12 @@ public sealed partial class MainWindow
         var loaded = await LoadImageAsync(path);
         if (loaded is null || _session.Selected is not ImageElement) return;
         Edit<ImageElement>(null, i => i.AssetId = loaded.Value.Id);
+    }
+
+    private void InsideFlip_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_ui || InsideFlipCombo.SelectedIndex < 0 || !_session.Doc.IsInside) return;
+        _session.SetInsideFlip(_session.Doc, InsideFlipCombo.SelectedIndex == 0 ? InsideFlip.TopBottom : InsideFlip.LeftRight);
     }
 
     private void Flip_Click(object sender, RoutedEventArgs e)

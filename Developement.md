@@ -32,15 +32,15 @@ Orientacyjna ilość pracy: **[S]** mała, **[M]** średnia, **[L]** duża.
 
 ## 📦 Podgląd 3D
 - **Animacja MP4 [M]:** obrót kasety jako wideo (GIF już jest) — lepsza jakość i mniejszy plik.
-- **Otwieranie pudełka [M]:** animacja otwarcia z rozkładającą się wkładką i kasetą w środku.
+- **Otwieranie pudełka [M]:** animacja otwarcia z rozkładającą się wkładką i kasetą w środku. Dopiero wtedy
+  widać całe wnętrze przodu — w zamkniętym pudełku (podgląd bez kasety) jego część zasłania klapka.
 - **Wybór kasety i pudełka [S]:** kolor obudowy kasety (przezroczysta, biała, kolorowa) i kolor tacki w pudełku.
 - **Półka [M]:** wszystkie Twoje projekty stoją obok siebie grzbietami, jak prawdziwa kolekcja.
 
 ## 🗂️ Kolekcja i wygoda
 - **Biblioteka kaset [M]:** ekran startowy z miniaturami projektów, wyszukiwaniem, tagami i datą nagrania.
 - **Autozapis i przywracanie po awarii [S]**, do tego lista ostatnio otwieranych projektów **[S]**.
-- **Otwieranie .kaseta dwuklikiem w Eksploratorze [S]**, a w wersji ambitnej także miniatury plików
-  w Eksploratorze **[L]**.
+- **Miniatury plików .kaseta w Eksploratorze [L]** (dwuklik już otwiera projekt).
 - **Automatyczne aktualizacje [M]:** launcher sam sprawdza, czy jest nowa wersja, np. na GitHubie.
 
 ## ✨ Dla klimatu

@@ -285,7 +285,9 @@ public sealed partial class EditorView : UserControl
         if (doc.IsInside)
         {
             float ty = ToScreen(0, -Math.Max(0, doc.Bleed)).Y - 44;
-            ds.DrawText("WNĘTRZE · DRUGA STRONA KARTKI — WIDOK PO ODWRÓCENIU (LEWA ↔ PRAWA)",
+            ds.DrawText(doc.Flip == InsideFlip.TopBottom
+                    ? "WNĘTRZE · DRUGA STRONA KARTKI — WIDOK PO OBRÓCENIU GÓRA ↔ DÓŁ (JAK PO OTWARCIU PUDEŁKA)"
+                    : "WNĘTRZE · DRUGA STRONA KARTKI — WIDOK PO OBRÓCENIU LEWA ↔ PRAWA",
                 new Rect(tl.X, ty, Math.Max(200, br.X - tl.X), 18), Mustard, _dimFormat);
         }
 

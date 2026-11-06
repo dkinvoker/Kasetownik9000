@@ -36,8 +36,8 @@ public sealed partial class Preview3DView : UserControl
 
     private readonly CanvasControl _canvas;
     private readonly TextBlock _modeText;
-    private readonly Button _rotateButton, _caseButton, _cardButton;
-    private bool _showCard = true;
+    private readonly Button _rotateButton, _caseButton, _cardButton, _cassetteButton;
+    private bool _showCard = true, _showCassette = true;
     private readonly Brush _keyBrush, _accentBrush, _creamBrush, _darkBrush;
 
     private EditorSession? _session;
@@ -75,7 +75,7 @@ public sealed partial class Preview3DView : UserControl
         root.Children.Add(_canvas);
 
         // --- lewy górny róg: "wyświetlacz" z nazwą trybu
-        var lcd = new Border { Style = (Style)res["LcdBorderStyle"], HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(16) };
+        var lcd = new Border { Style = (Style)res["LcdBorderStyle"], HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(16, 60, 16, 16) }; // pod zakładkami kart
         _modeText = new TextBlock { Style = (Style)res["LcdTextStyle"], Text = "PODGLĄD 3D" };
         lcd.Child = _modeText;
         root.Children.Add(lcd);
@@ -84,7 +84,7 @@ public sealed partial class Preview3DView : UserControl
         {
             Text = "Przeciągnij — obrót · kółko — przybliżenie · dwuklik — widok startowy",
             FontSize = 11, Foreground = (Brush)res["RetroCreamDimBrush"],
-            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(16, 22, 16, 0),
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(16, 66, 16, 0),
         };
         root.Children.Add(hint);
 
@@ -102,9 +102,12 @@ public sealed partial class Preview3DView : UserControl
         _rotateButton = Key("OBRACAJ", ToggleAutoRotate, "Powolny automatyczny obrót");
         _caseButton = Key("PUDEŁKO", ToggleCase, "Pokaż / ukryj plastikowe pudełko");
         _cardButton = Key("OKŁADKA", ToggleCard, "Pokaż / ukryj J-kartę (widać wtedy kasetę i jej naklejki)");
+        _cassetteButton = Key("KASETA", ToggleCassette,
+            "Pokaż / wyjmij kasetę z pudełka — widać wtedy wnętrze karty i złożone wkładki");
         bar.Children.Add(_rotateButton);
         bar.Children.Add(_caseButton);
         bar.Children.Add(_cardButton);
+        bar.Children.Add(_cassetteButton);
         bar.Children.Add(new Microsoft.UI.Xaml.Shapes.Rectangle { Width = 1, Margin = new Thickness(6, 6, 6, 9), Fill = (Brush)res["RetroLineBrush"] });
         bar.Children.Add(Key("ZAPISZ OBRAZ", () => SaveImageRequested?.Invoke(), "Zapisz ten widok jako obraz PNG (np. do pokazania znajomym)"));
         bar.Children.Add(Key("ZAPISZ GIF", () => SaveGifRequested?.Invoke(), "Zapisz animację obracającej się kasety (GIF) — w sam raz na Instagram czy Discorda"));
@@ -114,6 +117,7 @@ public sealed partial class Preview3DView : UserControl
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
         SetKeyActive(_caseButton, _showCase);
         SetKeyActive(_cardButton, _showCard);
+        SetKeyActive(_cassetteButton, _showCassette);
         Unloaded += (_, _) => UnhookRendering();
     }
 
@@ -205,9 +209,14 @@ public sealed partial class Preview3DView : UserControl
     private void Rebuild()
     {
         _scene?.Dispose();
-        _scene = _session is null ? null : BuildScene(_session);
+        if (_session is null) _scene = null;
+        else
+        {
+            var (cover, labels) = PickCards(_session);
+            _scene = BuildScene(_session, cover, labels);
+        }
         _dirty = false;
-        if (_scene is not null) _modeText.Text = _scene.Title;
+        UpdateModeText();
     }
 
     // ================================================================== sterowanie
@@ -219,9 +228,10 @@ public sealed partial class Preview3DView : UserControl
     }
 
     /// <summary>Ustawia kamerę bez animacji (np. do eksportu z linii poleceń).</summary>
-    public void SetView(float yaw, float pitch, float zoom = 1, bool? showCase = null, bool? showCard = null)
+    public void SetView(float yaw, float pitch, float zoom = 1, bool? showCase = null, bool? showCard = null, bool? showCassette = null)
     {
         if (showCard is { } scd) { _showCard = scd; SetKeyActive(_cardButton, scd); }
+        if (showCassette is { } scs) { _showCassette = scs; SetKeyActive(_cassetteButton, scs); UpdateModeText(); }
         _yaw = Wrap(yaw);
         _pitch = Wrap(pitch);
         _zoom = Math.Clamp(zoom, 0.4f, 4f);
@@ -273,6 +283,27 @@ public sealed partial class Preview3DView : UserControl
         _showCase = !_showCase;
         SetKeyActive(_caseButton, _showCase);
         _canvas.Invalidate();
+    }
+
+    /// <summary>
+    /// Wyjmuje kasetę z pudełka. Jeśli jest co oglądać (wnętrze karty, wkładki), obraca pudełko tyłem —
+    /// tak jak po otwarciu pudełka widać wnętrze przodu karty.
+    /// </summary>
+    private void ToggleCassette()
+    {
+        _showCassette = !_showCassette;
+        SetKeyActive(_cassetteButton, _showCassette);
+        UpdateModeText();
+        bool lookingAtFront = MathF.Cos(Rad(_yaw)) * MathF.Cos(Rad(_pitch)) > 0;
+        if (!_showCassette && lookingAtFront && _scene is { CassetteOnly: false } s && (s.HasInside || s.Inserts.Count > 0))
+            GoTo(-22, 160);
+        _canvas.Invalidate();
+    }
+
+    private void UpdateModeText()
+    {
+        if (_scene is null) return;
+        _modeText.Text = _scene.Title + (_showCassette ? (_scene.Inserts.Count > 0 ? " · WKŁADKI W ŚRODKU" : "") : " · BEZ KASETY");
     }
 
     private void HookRendering()
@@ -435,6 +466,8 @@ public sealed partial class Preview3DView : UserControl
         public CanvasRenderTarget? Texture;
         public Transform3DEffect? Effect;
         public Color Fill;
+        /// <summary>Druga strona ściany (wnętrze karty) — widoczna, gdy patrzymy na ścianę od spodu.</summary>
+        public Face? Back;
 
         public Vector3 Center => Origin + U * (W / 2) + V * (H / 2);
         public Vector3[] Corners => [Origin, Origin + U * W, Origin + U * W + V * H, Origin + V * H];
@@ -449,21 +482,25 @@ public sealed partial class Preview3DView : UserControl
         {
             Effect?.Dispose();
             Texture?.Dispose();
+            Back?.Dispose();
         }
     }
 
     private sealed class Scene : IDisposable
     {
         public readonly List<Face> Card = [];
+        /// <summary>Wkładki złożone za przodem — widoczne tylko bez kasety.</summary>
+        public readonly List<Face> Inserts = [];
         public readonly List<Face> Cassette = [];
         public readonly List<Face> Case = [];
         public Vector3 CaseSize;
-        public bool CassetteOnly;
+        public bool CassetteOnly, HasInside;
         public string Title = "PODGLĄD 3D";
 
         public void Dispose()
         {
             foreach (var f in Card) f.Dispose();
+            foreach (var f in Inserts) f.Dispose();
             foreach (var f in Cassette) f.Dispose();
             foreach (var f in Case) f.Dispose();
         }
@@ -484,17 +521,32 @@ public sealed partial class Preview3DView : UserControl
         ];
     }
 
-    private static Scene BuildScene(EditorSession session)
+    /// <summary>Ostatnio oglądana okładka i naklejki — przy przełączaniu zakładek druga z nich zostaje bez zmian.</summary>
+    private string? _coverId, _labelsId;
+
+    /// <summary>
+    /// Którą okładkę i które naklejki pokazać: z aktywnej zakładki (wnętrze → jego karta zewnętrzna).
+    /// Gdy aktywne są naklejki, okładka zostaje ta oglądana ostatnio (i odwrotnie); na start — pierwsze z listy.
+    /// </summary>
+    private (CardDocument? Cover, CardDocument? Labels) PickCards(EditorSession session)
+    {
+        var project = session.Project;
+        var active = session.Doc.IsInside ? project.OuterOf(session.Doc) ?? session.Doc : session.Doc;
+        if (active.HasRole(PanelRole.Label)) _labelsId = active.Id; else _coverId = active.Id;
+
+        var outers = project.OuterCards.ToList();
+        var cover = outers.Find(c => c.Id == _coverId && !c.HasRole(PanelRole.Label))
+                    ?? outers.Find(c => c.HasRole(PanelRole.Front))
+                    ?? outers.Find(c => !c.HasRole(PanelRole.Label));
+        var labels = outers.Find(c => c.Id == _labelsId && c.HasRole(PanelRole.Label))
+                     ?? outers.Find(c => c.HasRole(PanelRole.Label));
+        return (cover, labels);
+    }
+
+    private static Scene BuildScene(EditorSession session, CardDocument? jcard, CardDocument? labelCard)
     {
         var project = session.Project;
         var scene = new Scene();
-
-        // karta z przodem (J-card) i karta z naklejkami — z całego projektu, niezależnie od aktywnej zakładki
-        // (wnętrza kart — druga strona kartki — nie są osobnymi okładkami)
-        var outers = project.OuterCards.ToList();
-        var jcard = outers.FirstOrDefault(c => c.HasRole(PanelRole.Front))
-                    ?? outers.FirstOrDefault(c => !c.HasRole(PanelRole.Label));
-        var labelCard = outers.FirstOrDefault(c => c.HasRole(PanelRole.Label));
         var labels = labelCard is null ? [] : Enumerable.Range(0, labelCard.Panels.Count).Where(i => labelCard.Panels[i].Role == PanelRole.Label).ToList();
 
         CanvasRenderTarget? labelA = null, labelB = null;
@@ -523,20 +575,38 @@ public sealed partial class Preview3DView : UserControl
             float Ds = spine >= 0 ? (float)Math.Clamp(doc.Panels[spine].Height, 4, 40) : 12.7f;
             float Hb = back >= 0 ? (float)Math.Min(doc.Panels[back].Height, Hf) : 0;
 
-            var f = new Face { Origin = new(-W / 2, -Hf / 2, Ds / 2), U = Vector3.UnitX, V = Vector3.UnitY, Normal = Vector3.UnitZ, W = W, H = Hf, Fill = Paper };
-            f.SetTexture(RenderPanel(session, doc, front));
-            scene.Card.Add(f);
-            if (spine >= 0)
+            // wnętrze karty (druga strona kartki) — na spodzie każdej ściany; bez wnętrza — czysty papier
+            var inside = project.InsideOf(doc);
+            scene.HasInside = inside is not null;
+            void Add(List<Face> list, Face face, int panel, float? hOverride = null)
             {
-                var s = new Face { Origin = new(-W / 2, Hf / 2, Ds / 2), U = Vector3.UnitX, V = -Vector3.UnitZ, Normal = Vector3.UnitY, W = W, H = Ds, Fill = Paper };
-                s.SetTexture(RenderPanel(session, doc, spine));
-                scene.Card.Add(s);
+                face.SetTexture(RenderPanel(session, doc, panel, hOverride));
+                face.Back = BackSide(session, face, inside, panel, hOverride);
+                list.Add(face);
             }
+
+            Add(scene.Card, new Face { Origin = new(-W / 2, -Hf / 2, Ds / 2), U = Vector3.UnitX, V = Vector3.UnitY, Normal = Vector3.UnitZ, W = W, H = Hf, Fill = Paper }, front);
+            if (spine >= 0)
+                Add(scene.Card, new Face { Origin = new(-W / 2, Hf / 2, Ds / 2), U = Vector3.UnitX, V = -Vector3.UnitZ, Normal = Vector3.UnitY, W = W, H = Ds, Fill = Paper }, spine);
             if (back >= 0)
+                Add(scene.Card, new Face { Origin = new(-W / 2, Hf / 2, -Ds / 2), U = Vector3.UnitX, V = -Vector3.UnitY, Normal = -Vector3.UnitZ, W = W, H = Hb, Fill = Paper }, back, Hb);
+
+            // wkładki nad przodem (4- i 5-panelowa J-karta) złożone harmonijką za przodem: pierwsza zagina się
+            // za przód na górnej krawędzi i schodzi w dół (nadrukiem w stronę kasety), następna wraca do góry…
+            // Widać je tylko po wyjęciu kasety.
+            float foldY = -Hf / 2, dir = 1;
+            for (int k = 1; front - k >= 0; k++)
             {
-                var b = new Face { Origin = new(-W / 2, Hf / 2, -Ds / 2), U = Vector3.UnitX, V = -Vector3.UnitY, Normal = -Vector3.UnitZ, W = W, H = Hb, Fill = Paper };
-                b.SetTexture(RenderPanel(session, doc, back, Hb));
-                scene.Card.Add(b);
+                int panel = front - k;
+                float h = (float)Math.Min(doc.Panels[panel].Height, Hf - 0.4);
+                float z = Ds / 2 - 0.35f * k;
+                Add(scene.Inserts, new Face
+                {
+                    Origin = new(-W / 2, foldY + dir * h, z), U = Vector3.UnitX, V = -dir * Vector3.UnitY, Normal = -dir * Vector3.UnitZ,
+                    W = W, H = h, Fill = Paper,
+                }, panel, h);
+                foldY += dir * h;
+                dir = -dir;
             }
 
             cw = Math.Min(CassW, W - 1);
@@ -544,10 +614,9 @@ public sealed partial class Preview3DView : UserControl
             ct = Math.Min(CassT, Ds - 0.8f);
             // pudełko przylega do karty (ok. 1,2 mm luzu na stronę), jak prawdziwe opakowanie
             scene.CaseSize = new Vector3(Math.Max(W, CassW) + 2.6f, Hf + 2.4f, Ds + 2.4f);
-            bool hiddenInserts = front > 0;
-            scene.Title = (doc.FormatId == "custom" ? "WŁASNY FORMAT" : "J-CARD W PUDEŁKU")
-                          + (labelA is not null ? " · Z NAKLEJKAMI" : "")
-                          + (hiddenInserts ? " · WKŁADKI W ŚRODKU" : "");
+            // nazwa karty z zakładki — przy kilku wersjach w projekcie widać, która jest w pudełku
+            scene.Title = $"{(string.IsNullOrWhiteSpace(doc.Name) ? "KARTA" : doc.Name.ToUpperInvariant())} W PUDEŁKU"
+                          + (labelA is not null ? " · Z NAKLEJKAMI" : "");
         }
 
         // kaseta: strona A z przodu, strona B z tyłu (obrócona jak przy przekładaniu kasety)
@@ -563,10 +632,34 @@ public sealed partial class Preview3DView : UserControl
         return scene;
     }
 
-    /// <summary>Renderuje jeden panel karty (bez spadu) do tekstury.</summary>
-    private static CanvasRenderTarget RenderPanel(EditorSession session, CardDocument doc, int index, double? heightOverride = null)
+    /// <summary>
+    /// Spód ściany karty: wnętrze z drugiej strony kartki. Lewa ↔ prawa — odbite w poziomie (ten sam panel);
+    /// góra ↔ dół — odbite w pionie (panel z drugiego końca wnętrza). Bez wnętrza — czysty papier.
+    /// </summary>
+    private static Face BackSide(EditorSession session, Face f, CardDocument? inside, int panel, float? hOverride)
     {
-        double top = doc.PanelTop(index);
+        bool topBottom = inside?.Flip == InsideFlip.TopBottom;
+        var b = new Face
+        {
+            Origin = topBottom ? f.Origin + f.V * f.H : f.Origin + f.U * f.W,
+            U = topBottom ? f.U : -f.U,
+            V = topBottom ? -f.V : f.V,
+            Normal = -f.Normal, W = f.W, H = f.H, Fill = Paper,
+        };
+        if (inside is null) return b;
+        int j = CardProject.InsidePanelIndex(inside, panel);
+        if (j < 0 || j >= inside.Panels.Count) return b;
+        double h = inside.Panels[j].Height;
+        // widoczna jest tylko górna część panelu zewnętrznego — przy góra ↔ dół odpowiada jej dolna część panelu wnętrza
+        double offset = topBottom && hOverride is { } ho ? Math.Max(0, h - ho) : 0;
+        b.SetTexture(RenderPanel(session, inside, j, hOverride, offset));
+        return b;
+    }
+
+    /// <summary>Renderuje jeden panel karty (bez spadu) do tekstury.</summary>
+    private static CanvasRenderTarget RenderPanel(EditorSession session, CardDocument doc, int index, double? heightOverride = null, double yOffset = 0)
+    {
+        double top = doc.PanelTop(index) + yOffset;
         double h = heightOverride ?? doc.Panels[index].Height;
         var rt = new CanvasRenderTarget(CanvasDevice.GetSharedDevice(),
             Math.Max(1, (float)(doc.Width * TexPxPerMm)), Math.Max(1, (float)(h * TexPxPerMm)), 96);
@@ -723,18 +816,43 @@ public sealed partial class Preview3DView : UserControl
 
         var card = _showCard ? scene.Card : [];
 
-        // 2. karta widziana od wewnątrz (niezadrukowany papier)
-        foreach (var f in card.Where(f => !Visible(f)))
+        // ściana karty od spodu: wnętrze (druga strona kartki) albo czysty, przyciemniony papier
+        void DrawInside(Face f)
         {
+            if (f.Back is { Texture: not null } b)
+            {
+                DrawFace(ds, b, vps, Light(b) * 0.92f, Poly(b));
+                return;
+            }
             using var geo = CanvasGeometry.CreatePolygon(ds, Poly(f));
             ds.FillGeometry(geo, Shade(Paper, 0.75f));
         }
 
-        // 3. kaseta (wypukła bryła — wystarczy pominąć niewidoczne ścianki)
-        foreach (var f in scene.Cassette.Where(Visible)) DrawFace(ds, f, vps, Light(f), Poly(f));
+        // pozycja kamery w układzie sceny — do ustalania, która ściana leży za którą
+        Matrix4x4.Invert(view, out var viewInv);
+        var cameraWorld = Vector3.Transform(camera, viewInv);
 
-        // 4. karta od zewnątrz
-        foreach (var f in card.Where(Visible)) DrawFace(ds, f, vps, Light(f), Poly(f));
+        if (_showCassette)
+        {
+            // 2. karta widziana od wewnątrz
+            foreach (var f in BackToFront(card.Where(f => !Visible(f)), view, cameraWorld)) DrawInside(f);
+
+            // 3. kaseta (wypukła bryła — wystarczy pominąć niewidoczne ścianki)
+            foreach (var f in scene.Cassette.Where(Visible)) DrawFace(ds, f, vps, Light(f), Poly(f));
+
+            // 4. karta od zewnątrz
+            foreach (var f in BackToFront(card.Where(Visible), view, cameraWorld)) DrawFace(ds, f, vps, Light(f), Poly(f));
+        }
+        else
+        {
+            // bez kasety widać wnętrze karty i złożone wkładki — rysujemy od najdalszej ściany do najbliższej
+            var faces = _showCard ? scene.Card.Concat(scene.Inserts) : [];
+            foreach (var f in BackToFront(faces, view, cameraWorld))
+            {
+                if (Visible(f)) DrawFace(ds, f, vps, Light(f), Poly(f));
+                else DrawInside(f);
+            }
+        }
 
         // 5. przednie ścianki pudełka z odblaskiem
         if (_showCase)
@@ -748,6 +866,56 @@ public sealed partial class Preview3DView : UserControl
                 if (i < 2) DrawLidFrame(ds, f, P); // wytłoczona ramka wieczka (przód i tył)
             }
         }
+    }
+
+    /// <summary>
+    /// Kolejność malarza dla ścian karty. Samo porównanie głębokości środków zawodzi przy ścianach leżących
+    /// tuż obok siebie (przód i wkładka są 0,35 mm od siebie) — pod niektórymi kątami wnętrze „przebijało”
+    /// przez wkładkę. Dlatego po wstępnym sortowaniu poprawiamy kolejność testem płaszczyzn (Newell):
+    /// ściana A idzie przed B, gdy cała leży po drugiej stronie płaszczyzny B niż kamera
+    /// albo gdy B leży cała po stronie kamery względem płaszczyzny A.
+    /// </summary>
+    private static List<Face> BackToFront(IEnumerable<Face> faces, Matrix4x4 view, Vector3 camera)
+    {
+        var list = faces.OrderBy(f => Vector3.Transform(f.Center, view).Z).ToList();
+        int n = list.Count;
+        for (int guard = 0; guard < n * n; guard++)
+        {
+            bool moved = false;
+            for (int i = 0; i < n && !moved; i++)
+            {
+                for (int j = i + 1; j < n; j++)
+                {
+                    if (!IsBehind(list[j], list[i], camera) || IsBehind(list[i], list[j], camera)) continue;
+                    var f = list[j];
+                    list.RemoveAt(j);
+                    list.Insert(i, f);
+                    moved = true;
+                    break;
+                }
+            }
+            if (!moved) break;
+        }
+        return list;
+    }
+
+    /// <summary>Czy ściana <paramref name="a"/> jest za ścianą <paramref name="b"/> (patrząc z kamery).</summary>
+    private static bool IsBehind(Face a, Face b, Vector3 camera)
+    {
+        const float eps = 0.01f;
+        float camB = Vector3.Dot(camera - b.Origin, b.Normal);
+        if (MathF.Abs(camB) > eps)
+        {
+            float s = MathF.Sign(camB);
+            if (a.Corners.All(p => Vector3.Dot(p - b.Origin, b.Normal) * s <= eps)) return true;
+        }
+        float camA = Vector3.Dot(camera - a.Origin, a.Normal);
+        if (MathF.Abs(camA) > eps)
+        {
+            float s = MathF.Sign(camA);
+            if (b.Corners.All(p => Vector3.Dot(p - a.Origin, a.Normal) * s >= -eps)) return true;
+        }
+        return false;
     }
 
     private static Color Shade(Color c, float k) =>

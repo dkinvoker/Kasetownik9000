@@ -25,6 +25,8 @@ public partial class App : Application
 
         _window = new MainWindow();
         _window.Activate();
+        // dwuklik na .kaseta w Eksploratorze — rejestracja w tle, żeby nie opóźniać pojawienia się okna
+        _ = Task.Run(FileAssociation.EnsureRegistered);
     }
 
     /// <summary>
@@ -33,7 +35,7 @@ public partial class App : Application
     ///       [--tracks "C:\Muzyka\Składanka" [--tape 60]]   (utwory z plików → listy {lista A}/{lista B})
     ///       [--export-pdf out.pdf [--calibrated]] [--export-png out.png] [--export-kaseta out.kaseta]
     ///       [--print "Nazwa drukarki" [--print-file wydruk.pdf]] [--print-calibration "Nazwa drukarki" [--print-file test.pdf]]
-    ///       [--export-3d mockup.png [--yaw -28] [--pitch 24] [--zoom 1] [--case on|off]] [--export-gif obrot.gif]
+    ///       [--export-3d mockup.png [--yaw -28] [--pitch 24] [--zoom 1] [--case on|off] [--cover on|off] [--cassette on|off]] [--export-gif obrot.gif]
     ///       [--inside] (nowy projekt: dodaj wnętrze J-karty) [--no-duplex] [--duplex-short] [--print-duplex-test "Nazwa drukarki"]
     ///   PDF i druk obejmują cały komplet kart, chyba że podano --card albo --fill.
     ///   Wnętrza kart idą na odwrocie arkusza (w PDF: strony przód/tył na przemian), chyba że podano --no-duplex.
@@ -104,7 +106,8 @@ public partial class App : Application
                     System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : def;
                 bool? showCase = Arg("--case") switch { "on" => true, "off" => false, _ => null };
                 bool? showCard = Arg("--cover") switch { "on" => true, "off" => false, _ => null };
-                preview.SetView(F("--yaw", -28), F("--pitch", 24), F("--zoom", 1), showCase, showCard);
+                bool? showCassette = Arg("--cassette") switch { "on" => true, "off" => false, _ => null };
+                preview.SetView(F("--yaw", -28), F("--pitch", 24), F("--zoom", 1), showCase, showCard, showCassette);
                 await preview.ExportPngAsync(Path.GetFullPath(png3d), 1600, 1100);
             }
             if (Arg("--export-gif") is { } gif)

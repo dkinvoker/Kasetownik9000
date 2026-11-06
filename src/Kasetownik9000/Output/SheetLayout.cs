@@ -156,6 +156,8 @@ public sealed class SheetLayout
                         if (cards[i].InsideOf == outer.Id) { inside = i; break; }
                     if (inside < 0) continue;
                     var (pos, rotated) = MirrorToBack(pc.Position.X, pc.Position.Y, outer.Width, outer.Height, pageW, pageH, opt.DuplexShortEdge, ax, ay);
+                    // wnętrze zaprojektowane „góra ↔ dół” to obraz lewa ↔ prawa obrócony o 180°
+                    if (cards[inside].Flip == InsideFlip.TopBottom) rotated = !rotated;
                     page.Back.Add(new PlacedCard(inside, pos, rotated));
                 }
             }

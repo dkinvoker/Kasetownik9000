@@ -13,6 +13,9 @@ public static class Units
 
 public enum PanelRole { Front, Spine, Flap, Inner, Label, Other }
 
+/// <summary>Kierunek odwracania kartki, żeby zobaczyć jej wnętrze.</summary>
+public enum InsideFlip { LeftRight, TopBottom }
+
 public sealed class PanelDef
 {
     public string Name { get; set; } = "Panel";
@@ -40,6 +43,12 @@ public sealed class CardDocument
     /// null = zwykła karta.
     /// </summary>
     public string? InsideOf { get; set; }
+    /// <summary>
+    /// Wnętrze: jak obraca się kartkę, żeby je zobaczyć. Góra ↔ dół — tak widać wnętrze po otwarciu pudełka
+    /// (J-karta obraca się na zawiasie przy grzbiecie); panele wnętrza idą wtedy w odwrotnej kolejności.
+    /// Brak wartości w pliku = lewa ↔ prawa (tak działały wnętrza z wersji 1.7).
+    /// </summary>
+    public InsideFlip Flip { get; set; } = InsideFlip.LeftRight;
     /// <summary>Nazwa zakładki, np. "J-card" albo "Naklejki".</summary>
     public string Name { get; set; } = "";
     public string FormatId { get; set; } = "jcard";
@@ -67,15 +76,18 @@ public sealed class CardDocument
         return y;
     }
 
-    public int PanelIndexAt(double y)
+    public int PanelIndexAt(double y) => PanelIndexAtIn(Panels, y);
+
+    /// <summary>Indeks panelu na wysokości y w podanym układzie paneli (np. sprzed zmiany).</summary>
+    public int PanelIndexAtIn(List<PanelDef> panels, double y)
     {
         double top = 0;
-        for (int i = 0; i < Panels.Count; i++)
+        for (int i = 0; i < panels.Count; i++)
         {
-            if (y < top + Panels[i].Height) return i;
-            top += Panels[i].Height;
+            if (y < top + panels[i].Height) return i;
+            top += panels[i].Height;
         }
-        return Panels.Count - 1;
+        return Math.Max(0, panels.Count - 1);
     }
 
     public CardElement? FindElement(string? id) => id is null ? null : Elements.Find(e => e.Id == id);
@@ -155,15 +167,39 @@ public sealed class CardProject
             inside.FormatId = outer.FormatId;
             inside.Width = outer.Width;
             inside.Bleed = outer.Bleed;
-            bool same = inside.Panels.Count == outer.Panels.Count;
-            for (int i = 0; same && i < outer.Panels.Count; i++)
+            var expected = InsidePanels(outer, inside.Flip);
+            bool same = inside.Panels.Count == expected.Count;
+            for (int i = 0; same && i < expected.Count; i++)
             {
-                var a = inside.Panels[i]; var b = outer.Panels[i];
+                var a = inside.Panels[i]; var b = expected[i];
                 same = a.Name == b.Name && a.Height == b.Height && a.Role == b.Role && a.CutAfter == b.CutAfter;
             }
-            if (!same) inside.Panels = [.. outer.Panels.Select(p => p.Clone())];
+            if (!same) inside.Panels = expected;
         }
     }
+
+    /// <summary>
+    /// Panele wnętrza: przy obracaniu lewa ↔ prawa w tej samej kolejności co na zewnątrz, przy góra ↔ dół —
+    /// w odwrotnej (linia cięcia „pod panelem” przechodzi wtedy na krawędź nad nim).
+    /// </summary>
+    public static List<PanelDef> InsidePanels(CardDocument outer, InsideFlip flip)
+    {
+        var src = outer.Panels;
+        if (flip == InsideFlip.LeftRight) return [.. src.Select(p => p.Clone())];
+        int n = src.Count;
+        var list = new List<PanelDef>(n);
+        for (int j = 0; j < n; j++)
+        {
+            var p = src[n - 1 - j].Clone();
+            p.CutAfter = j < n - 1 && src[n - 2 - j].CutAfter;
+            list.Add(p);
+        }
+        return list;
+    }
+
+    /// <summary>Który panel wnętrza leży za panelem <paramref name="outerIndex"/> karty zewnętrznej.</summary>
+    public static int InsidePanelIndex(CardDocument inside, int outerIndex) =>
+        inside.Flip == InsideFlip.TopBottom ? inside.Panels.Count - 1 - outerIndex : outerIndex;
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]

@@ -26,13 +26,15 @@ internal static partial class Program
                 WorkingDirectory = Environment.CurrentDirectory,
             };
             foreach (var a in args) psi.ArgumentList.Add(a);
+            // aplikacja kojarzy pliki .kaseta z TYM exe (rozpakowana kopia zmienia folder przy każdej wersji)
+            if (Environment.ProcessPath is { } self) psi.Environment["KASETOWNIK9000_LAUNCHER"] = self;
 
             using var process = Process.Start(psi) ?? throw new InvalidOperationException("Nie udało się uruchomić procesu aplikacji.");
             TryWriteUninstallScript();
 
             // tryb linii poleceń: czekamy na wynik i zwracamy kod wyjścia; okno — od razu kończymy
             bool cli = args.Any(a => a.StartsWith("--export-", StringComparison.OrdinalIgnoreCase)
-                                     || a.Equals("--print", StringComparison.OrdinalIgnoreCase));
+                                     || a.StartsWith("--print", StringComparison.OrdinalIgnoreCase));
             if (!cli) return 0;
             process.WaitForExit();
             return process.ExitCode;
@@ -160,6 +162,7 @@ internal static partial class Program
 
         echo   Zostanie usunięty folder z rozpakowaną aplikacją:
         echo     %APPDIR%
+        echo   oraz skojarzenie plików .kaseta (przestaną się otwierać dwuklikiem).
         echo.
         echo   Twoje projekty .kaseta, obrazy PNG i pliki PDF zostaną nietknięte.
         echo.
@@ -171,6 +174,7 @@ internal static partial class Program
 
         :remove
 
+        call :unassociate
         rmdir /s /q "%APPDIR%" 2>nul
         if exist "%APPDIR%" goto :failed
 
@@ -183,10 +187,19 @@ internal static partial class Program
         (goto) 2>nul & del "%~f0"
 
         :nothing
+        call :unassociate
         echo   Nie ma czego usuwać - aplikacja nie jest rozpakowana na tym komputerze.
         echo.
         pause
         (goto) 2>nul & del "%~f0"
+
+        :unassociate
+        rem skojarzenie .kaseta (HKCU) - rozszerzenie usuwamy tylko, jeśli wskazuje na Kasetownika
+        reg delete "HKCU\Software\Classes\Kasetownik9000.Projekt" /f >nul 2>nul
+        reg query "HKCU\Software\Classes\.kaseta" /ve 2>nul | find /i "Kasetownik9000.Projekt" >nul
+        if not errorlevel 1 reg delete "HKCU\Software\Classes\.kaseta" /f >nul 2>nul
+        ie4uinit.exe -show >nul 2>nul
+        exit /b 0
 
         :running
         echo   Kasetownik 9000 jest teraz uruchomiony.

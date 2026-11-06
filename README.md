@@ -4,7 +4,7 @@ Aplikacja do projektowania i drukowania okładek na kasety magnetofonowe — J-c
 i naklejki na kasetę — z kalkulatorem taśmy i podglądem 3D. WinUI 3 + Win2D, skompilowana do
 **Native AOT** (okno pojawia się w ułamku sekundy), z wyglądem prosto z magnetofonu z lat 80.
 
-**Wersja 1.7** — co się zmieniało, opisuje [CHANGELOG.md](CHANGELOG.md), a pomysły na dalszy rozwój
+**Wersja 1.8** — co się zmieniało, opisuje [CHANGELOG.md](CHANGELOG.md), a pomysły na dalszy rozwój
 [Developement.md](Developement.md).
 
 ![ikona](src/Kasetownik9000/Assets/AppIcon.png)
@@ -51,7 +51,9 @@ i naklejki na kasetę — z kalkulatorem taśmy i podglądem 3D. WinUI 3 + Win2D
   białymi brzegami.
 - **Wnętrze karty i druk dwustronny**: „+ KARTA” → „Wnętrze…” dodaje drugą stronę kartki (np. na teksty
   piosenek i podziękowania) jako osobną zakładkę z tymi samymi panelami. Projektuje się ją tak, jak widać
-  kartkę po odwróceniu (lewa ↔ prawa); przy druku trafia na odwrocie, dokładnie za swoją kartą. Drukarka
+  kartkę obróconą **góra ↔ dół** — tak wnętrze przodu widać po otwarciu pudełka (J-karta obraca się na zawiasie
+  przy grzbiecie), więc panele idą w odwrotnej kolejności; można też przełączyć na lewa ↔ prawa. Przy druku
+  wnętrze trafia na odwrocie, dokładnie za swoją kartą. Drukarka
   z dupleksem drukuje obie strony sama, bez dupleksu — najpierw przody, potem po przełożeniu kartek tyły.
   Do wyboru obracanie kartki wzdłuż dłuższej albo krótszej krawędzi. **Wyrównanie stron**: kartka testowa
   (miarki z przodu, krzyżyk z tyłu) — pod światło widać, o ile tył „ucieka”, a wpisana korekta działa przy
@@ -63,6 +65,11 @@ i naklejki na kasetę — z kalkulatorem taśmy i podglądem 3D. WinUI 3 + Win2D
 - **Podgląd 3D** (klawisz „3D PODGLĄD” albo F3): J-karta złożona wokół kasety w przezroczystym pudełku,
   na kasecie Twoje naklejki, obracanie myszą, widoki przód / 3/4 / grzbiet / tył, automatyczny obrót,
   pudełko i okładkę można ukryć, zapis **mockupu PNG** i **animacji GIF**. Odświeża się na żywo.
+  Klawisz **KASETA** wyjmuje kasetę z pudełka: widać wtedy od tyłu wnętrze karty (druga strona kartki)
+  i złożone wkładki 4- i 5-panelowej J-karty. Gdy projekt ma kilka wersji okładki albo naklejek, w pudełku
+  jest ta z aktywnej zakładki — zakładki są widoczne także w podglądzie 3D.
+- **Dwuklik na pliku `.kaseta`** w Eksploratorze otwiera projekt (pliki mają ikonę kasety). Skojarzenie
+  zapisuje się samo przy uruchomieniu aplikacji — tylko dla Twojego konta, bez uprawnień administratora.
 
 ## Uruchomienie i rozdawanie
 
@@ -74,8 +81,11 @@ na Windows 10 2004+ / Windows 11:
   do `%LOCALAPPDATA%\Kasetownik9000\app\<wersja>` (ok. 2–3 s), kolejne starty są natychmiastowe.
   Nowsza wersja exe sama rozpakuje się obok i usunie starą.
   **Odinstalowanie:** po pierwszym uruchomieniu obok exe pojawia się `Kasetownik9000 - odinstaluj.cmd` —
-  dwuklik, „T” i folder w `%LOCALAPPDATA%` znika razem z ustawieniami (skrypt sprawdza, czy aplikacja nie jest
-  otwarta, nie rusza projektów ani wydruków i na koniec usuwa sam siebie). Potem wystarczy skasować exe.
+  dwuklik, „T” i folder w `%LOCALAPPDATA%` znika razem z ustawieniami i skojarzeniem plików `.kaseta`
+  (skrypt sprawdza, czy aplikacja nie jest otwarta, nie rusza projektów ani wydruków i na koniec usuwa sam
+  siebie). Potem wystarczy skasować exe.
+  Pliki `.kaseta` otwiera dwuklikiem ten exe, który był uruchomiony ostatnio — po przeniesieniu go w inne
+  miejsce wystarczy raz go uruchomić.
 - **`publish\win-x64\`** — ten sam program jako zwykły folder (exe + biblioteki Windows App SDK).
 
 > Plik nie jest podpisany certyfikatem, więc Windows SmartScreen przy pierwszym uruchomieniu
@@ -141,6 +151,7 @@ Kasetownik9000.exe projekt.kaseta --export-pdf komplet.pdf
 Kasetownik9000.exe projekt.kaseta --card 1 --fill --export-pdf dwie-jkarty.pdf
 Kasetownik9000.exe --format jcard4 --starter mixtape --komplet --tracks "C:\Muzyka\Składanka" --tape 60 --export-kaseta skladanka.kaseta
 Kasetownik9000.exe projekt.kaseta --export-3d mockup.png --yaw -28 --pitch 24 --case on --cover on
+Kasetownik9000.exe projekt.kaseta --export-3d wnetrze.png --yaw -22 --pitch 160 --cassette off
 Kasetownik9000.exe projekt.kaseta --export-gif obrot.gif
 Kasetownik9000.exe projekt.kaseta --print "Nazwa drukarki"
 Kasetownik9000.exe --print-calibration "Nazwa drukarki"

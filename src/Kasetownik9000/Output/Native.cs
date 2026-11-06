@@ -153,6 +153,11 @@ internal static unsafe partial class Native
     [LibraryImport("user32.dll")]
     internal static partial uint GetDpiForWindow(nint hwnd);
 
+    public const int SHCNE_ASSOCCHANGED = 0x08000000;
+
+    [LibraryImport("shell32.dll")]
+    internal static partial void SHChangeNotify(int eventId, uint flags, nint item1, nint item2);
+
     public const uint MB_OKCANCEL = 0x1, MB_ICONINFORMATION = 0x40;
     public const int IDOK = 1;
 
