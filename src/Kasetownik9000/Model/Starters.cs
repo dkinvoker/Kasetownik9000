@@ -72,6 +72,33 @@ public static partial class Starters
         }
     }
 
+    /// <summary>
+    /// Wnętrze karty (druga strona kartki): tło jak na zewnątrz, żeby styl był spójny, a na dużych panelach
+    /// (przód, wkładki) miejsce na teksty piosenek i podziękowania. Grzbietu i klapki od środka nie widać — zostają puste.
+    /// </summary>
+    public static void ApplyInside(CardDocument inside, CardDocument outer)
+    {
+        inside.Background = outer.Background;
+        inside.Elements.Clear();
+        var bg = ColorUtil.Parse(outer.Background, Windows.UI.Color.FromArgb(255, 255, 255, 255));
+        bool dark = (0.299 * bg.R + 0.587 * bg.G + 0.114 * bg.B) / 255 < 0.5;
+        string ink = dark ? "#FFF2EDE4" : Ink, soft = dark ? "#FFB8B0A4" : "#FF8A7E72";
+        double W = inside.Width;
+        int big = 0;
+        foreach (var (p, top, _) in Panels(inside))
+        {
+            if (p.Height < 40) continue;
+            bool first = big++ == 0;
+            inside.Elements.Add(Text("Nagłówek", first ? "Teksty" : "Podziękowania", 7, top + 6, W - 14, 7, 11, color: ink,
+                bold: true, spacing: 0.25, upper: true));
+            inside.Elements.Add(Shape("Linia", ShapeKind.Rectangle, 7, top + 13.5, 24, 0.5, soft));
+            inside.Elements.Add(Text("Treść", first
+                    ? "Tu wpisz teksty piosenek.\n\nTekst sam się zmniejszy, żeby zmieścić się w ramce."
+                    : "Dziękujemy wszystkim, którzy pomogli przy nagraniu.\n\nNagrano: {data}",
+                7, top + 16, W - 14, p.Height - 22, 9, color: ink, autoFit: true, lineSpacing: 1.15));
+        }
+    }
+
     public static TextElement Text(string name, string text, double x, double y, double w, double h, double pt,
         string color = Ink, bool bold = false, TextAlign align = TextAlign.Left, TextVAlign valign = TextVAlign.Top,
         string font = "Bahnschrift", double spacing = 0, bool upper = false, bool autoFit = false,

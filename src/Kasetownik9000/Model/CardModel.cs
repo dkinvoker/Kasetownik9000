@@ -32,6 +32,14 @@ public sealed class PanelDef
 public sealed class CardDocument
 {
     public int Version { get; set; } = 1;
+    /// <summary>Stały identyfikator karty — wiąże wnętrze (drugą stronę kartki) z kartą zewnętrzną.</summary>
+    public string Id { get; set; } = CardElement.NewId();
+    /// <summary>
+    /// Wnętrze karty o tym Id: druga strona tej samej kartki (druk dwustronny). Wymiary i panele są zawsze
+    /// takie jak w karcie zewnętrznej; treść projektuje się tak, jak widać ją po odwróceniu kartki (lewa ↔ prawa).
+    /// null = zwykła karta.
+    /// </summary>
+    public string? InsideOf { get; set; }
     /// <summary>Nazwa zakładki, np. "J-card" albo "Naklejki".</summary>
     public string Name { get; set; } = "";
     public string FormatId { get; set; } = "jcard";
@@ -73,6 +81,11 @@ public sealed class CardDocument
     public CardElement? FindElement(string? id) => id is null ? null : Elements.Find(e => e.Id == id);
 
     public bool HasRole(PanelRole role) => Panels.Exists(p => p.Role == role);
+
+    [JsonIgnore] public bool IsInside => InsideOf is not null;
+
+    /// <summary>Czy ta karta może mieć wnętrze (naklejki na kasetę są jednostronne).</summary>
+    [JsonIgnore] public bool CanHaveInside => !IsInside && !HasRole(PanelRole.Label);
 }
 
 /// <summary>Dane albumu — wstawiane do tekstów przez pola {tytuł}, {wykonawca}…</summary>
@@ -118,6 +131,39 @@ public sealed class CardProject
     public AlbumInfo Album { get; set; } = new();
     public TapePlan Tape { get; set; } = new();
     public List<CardDocument> Cards { get; set; } = [];
+
+    /// <summary>Wnętrze danej karty (druga strona kartki) albo null.</summary>
+    public CardDocument? InsideOf(CardDocument outer) => Cards.Find(c => c.InsideOf == outer.Id);
+
+    /// <summary>Karta zewnętrzna dla wnętrza albo null.</summary>
+    public CardDocument? OuterOf(CardDocument inside) => inside.InsideOf is null ? null : Cards.Find(c => c.Id == inside.InsideOf);
+
+    /// <summary>Karty „z zewnątrz” — to one leżą na przedniej stronie arkusza, w 3D itd.</summary>
+    public IEnumerable<CardDocument> OuterCards => Cards.Where(c => !c.IsInside);
+
+    /// <summary>
+    /// Wnętrza dostają wymiary, spad i panele karty zewnętrznej (zawsze w tej samej kolejności — kartkę obracamy
+    /// jak stronę książki). Wnętrze bez karty zewnętrznej staje się zwykłą kartą. Wywoływane po każdej zmianie.
+    /// </summary>
+    public void SyncInsides()
+    {
+        foreach (var inside in Cards)
+        {
+            if (inside.InsideOf is null) continue;
+            var outer = OuterOf(inside);
+            if (outer is null || outer.IsInside || ReferenceEquals(outer, inside)) { inside.InsideOf = null; continue; }
+            inside.FormatId = outer.FormatId;
+            inside.Width = outer.Width;
+            inside.Bleed = outer.Bleed;
+            bool same = inside.Panels.Count == outer.Panels.Count;
+            for (int i = 0; same && i < outer.Panels.Count; i++)
+            {
+                var a = inside.Panels[i]; var b = outer.Panels[i];
+                same = a.Name == b.Name && a.Height == b.Height && a.Role == b.Role && a.CutAfter == b.CutAfter;
+            }
+            if (!same) inside.Panels = [.. outer.Panels.Select(p => p.Clone())];
+        }
+    }
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
@@ -182,6 +228,9 @@ public sealed class ImageElement : CardElement
     public string AssetId { get; set; } = "";
     public ImageFit Fit { get; set; } = ImageFit.Fill;
     public ImageFilter Filter { get; set; } = ImageFilter.None;
+    /// <summary>Odbicie lustrzane w poziomie (lewa ↔ prawa) i w pionie (góra ↕ dół), wokół środka ramki.</summary>
+    public bool FlipX { get; set; }
+    public bool FlipY { get; set; }
 
     public override string KindName => "Obraz";
     public override string Glyph => "";

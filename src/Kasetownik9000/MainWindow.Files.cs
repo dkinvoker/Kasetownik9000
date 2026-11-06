@@ -410,26 +410,76 @@ public sealed partial class MainWindow
 
     // ================================================================== schowek
 
-    private bool CopySelected()
+    /// <summary>
+    /// Kopiuje zaznaczony element: własny format (JSON z osadzonym obrazem) + tekst albo obraz dla innych programów.
+    /// Własny format zapisujemy jako bajty UTF-8 w strumieniu — po Clipboard.Flush() Windows i tak oddaje go
+    /// jako strumień (a nie string), więc odczyt w PasteAsync obsługuje oba przypadki.
+    /// </summary>
+    private async Task<bool> CopySelectedAsync()
     {
         var e = _session.Selected;
         if (e is null) return false;
         var payload = new ClipboardPayload { Element = e };
+        byte[]? imageBytes = null;
         if (e is ImageElement img && _session.Assets.GetBytes(img.AssetId) is { } bytes)
         {
             payload.AssetId = img.AssetId;
             payload.AssetData = Convert.ToBase64String(bytes);
+            imageBytes = bytes;
         }
-        var dp = new DataPackage();
-        dp.SetData(ClipboardFormat, JsonSerializer.Serialize(payload, ModelJson.Default.ClipboardPayload));
-        if (e is TextElement t) dp.SetText(t.Text);
         try
         {
+            var json = JsonSerializer.Serialize(payload, ModelJson.Default.ClipboardPayload);
+            var dp = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
+            dp.SetData(ClipboardFormat, await ToStreamAsync(System.Text.Encoding.UTF8.GetBytes(json)));
+            if (e is TextElement t) dp.SetText(t.Text);
+            // obraz trafia też jako zwykła bitmapa — da się go wkleić np. w Paincie
+            if (imageBytes is not null) dp.SetBitmap(RandomAccessStreamReference.CreateFromStream(await ToStreamAsync(imageBytes)));
             Clipboard.SetContent(dp);
             Clipboard.Flush();
+            return true;
         }
-        catch { }
-        return true;
+        catch (Exception ex)
+        {
+            ShowToast($"Nie udało się skopiować: {ex.Message}", InfoBarSeverity.Error);
+            return false;
+        }
+    }
+
+    private static async Task<InMemoryRandomAccessStream> ToStreamAsync(byte[] bytes)
+    {
+        var ms = new InMemoryRandomAccessStream();
+        using (var writer = new DataWriter(ms.GetOutputStreamAt(0)))
+        {
+            writer.WriteBytes(bytes);
+            await writer.StoreAsync();
+            await writer.FlushAsync();
+            writer.DetachStream();
+        }
+        ms.Seek(0);
+        return ms;
+    }
+
+    /// <summary>Dane własnego formatu ze schowka jako tekst: string, strumień albo bufor (UTF-8 lub UTF-16).</summary>
+    private static async Task<string?> ReadClipboardTextAsync(object? data)
+    {
+        byte[] bytes;
+        switch (data)
+        {
+            case string s: return s;
+            case IRandomAccessStream stream: bytes = await ReadAllAsync(stream); break;
+            case IBuffer buffer:
+                bytes = new byte[buffer.Length];
+                DataReader.FromBuffer(buffer).ReadBytes(bytes);
+                break;
+            case byte[] raw: bytes = raw; break;
+            default: return null;
+        }
+        // JSON zaczyna się od '{' — w UTF-16 drugi bajt to zero
+        var text = bytes.Length >= 2 && bytes[1] == 0
+            ? System.Text.Encoding.Unicode.GetString(bytes)
+            : System.Text.Encoding.UTF8.GetString(bytes);
+        return text.TrimStart('﻿').TrimEnd('\0');
     }
 
     private async Task PasteAsync(Vector2? at)
@@ -437,7 +487,7 @@ public sealed partial class MainWindow
         try
         {
             var view = Clipboard.GetContent();
-            if (view.Contains(ClipboardFormat) && await view.GetDataAsync(ClipboardFormat) is string json)
+            if (view.Contains(ClipboardFormat) && await ReadClipboardTextAsync(await view.GetDataAsync(ClipboardFormat)) is { Length: > 0 } json)
             {
                 var payload = JsonSerializer.Deserialize(json, ModelJson.Default.ClipboardPayload);
                 if (payload?.Element is { } el)
@@ -448,7 +498,13 @@ public sealed partial class MainWindow
                     copy.Name = _session.UniqueName(el.Name.Length > 0 ? el.Name : copy.KindName);
                     copy.Locked = false;
                     if (at is { } p) { copy.X = p.X - copy.Width / 2; copy.Y = p.Y - copy.Height / 2; }
-                    else { copy.X += 3; copy.Y += 3; }
+                    else
+                    {
+                        // jak Ctrl+D: przesunięcie o 3 mm; kolejne wklejenia układają się kaskadą, a nie jedno na drugim
+                        int guard = 0;
+                        do { copy.X += 3; copy.Y += 3; }
+                        while (++guard < 30 && _session.Doc.Elements.Exists(o => Math.Abs(o.X - copy.X) < 0.01 && Math.Abs(o.Y - copy.Y) < 0.01));
+                    }
                     _session.AddElement(copy);
                     return;
                 }
@@ -485,16 +541,24 @@ public sealed partial class MainWindow
 
     private enum OutputKind { Print, Pdf, Png }
 
-    /// <summary>Okno opcji wydruku/eksportu. Calibrate = użytkownik chce najpierw skalibrować drukarkę.</summary>
-    private async Task<(PrintOptions? Options, bool Calibrate)> ShowOutputOptionsAsync(OutputKind kind, PrintOptions current)
+    /// <summary>Co dalej po oknie opcji: wydruk/eksport albo najpierw kalibracja / wyrównanie stron.</summary>
+    private enum OutputNext { Go, Cancel, Calibrate, AlignDuplex }
+
+    /// <summary>Okno opcji wydruku/eksportu.</summary>
+    private async Task<(PrintOptions? Options, OutputNext Next)> ShowOutputOptionsAsync(OutputKind kind, PrintOptions current)
     {
         var d = _session.Doc;
-        var cards = _session.Project.Cards;
+        var project = _session.Project;
+        var cards = project.Cards;
+        var outers = cards.Where(c => !c.IsInside).ToList();
+        var currentOuter = d.IsInside ? project.OuterOf(d) ?? d : d;
         var settings = AppSettings.Current;
         var panel = new StackPanel { Spacing = 10, MinWidth = 440 };
-        RadioButtons? dpi = null, scope = null;
-        ComboBox? paper = null;
-        CheckBox? bleed = null, crop = null, fold = null, fill = null, calibrated = null;
+        RadioButtons? dpi = null, scope = null, duplexMode = null;
+        ComboBox? paper = null, flipEdge = null;
+        CheckBox? bleed = null, crop = null, fold = null, fill = null, calibrated = null, duplex = null;
+        var next = OutputNext.Go;
+        ContentDialog? dialogRef = null;
 
         if (kind == OutputKind.Png)
         {
@@ -519,16 +583,18 @@ public sealed partial class MainWindow
                 panel.Children.Add(paper);
             }
 
-            int fits = SheetLayout.Compute(210, 297, cards, [_session.ActiveIndex], new PrintOptions { FillPage = true }).CardCount;
+            var single = CardRasterizer.CardsToPrint(_session, new PrintOptions { AllCards = false });
+            int fits = SheetLayout.Compute(210, 297, cards, single, new PrintOptions { FillPage = true }).CardCount;
             fill = new CheckBox { Content = $"Wypełnij arkusz kopiami bieżącej karty (na A4: {fits})", IsChecked = current.FillPage };
 
-            if (cards.Count > 1)
+            string WithInside(CardDocument c) => project.InsideOf(c) is null ? c.Name : $"{c.Name} (+ wnętrze)";
+            if (outers.Count > 1)
             {
-                var all = Enumerable.Range(0, cards.Count).ToList();
+                var all = Enumerable.Range(0, cards.Count).Where(i => !cards[i].IsInside).ToList();
                 int sheets = SheetLayout.Compute(210, 297, cards, all, new PrintOptions()).Pages.Count;
                 scope = new RadioButtons { Header = "Co wydrukować", SelectedIndex = current.AllCards ? 0 : 1 };
-                scope.Items.Add($"Cały komplet: {string.Join(" + ", cards.Select(c => c.Name))} ({sheets} {(sheets == 1 ? "arkusz" : "arkusze")} A4)");
-                scope.Items.Add($"Tylko bieżącą kartę: {d.Name}");
+                scope.Items.Add($"Cały komplet: {string.Join(" + ", outers.Select(WithInside))} ({sheets} {(sheets == 1 ? "arkusz" : "arkusze")} A4)");
+                scope.Items.Add($"Tylko bieżącą kartę: {WithInside(currentOuter)}");
                 scope.SelectionChanged += (_, _) => fill.IsEnabled = scope.SelectedIndex == 1;
                 fill.IsEnabled = scope.SelectedIndex == 1;
                 panel.Children.Add(scope);
@@ -539,6 +605,55 @@ public sealed partial class MainWindow
             panel.Children.Add(crop);
             panel.Children.Add(fold);
             panel.Children.Add(fill);
+
+            // ~~~ druk dwustronny: wnętrza kart na odwrocie ~~~
+            if (cards.Exists(c => c.IsInside))
+            {
+                duplex = new CheckBox { Content = "Druk dwustronny — wnętrza kart na odwrocie kartki", IsChecked = current.Duplex };
+                var details = new StackPanel { Spacing = 8, Margin = new Thickness(28, 0, 0, 0) };
+                if (kind == OutputKind.Print)
+                {
+                    duplexMode = new RadioButtons { SelectedIndex = current.DuplexManual ? 1 : 0 };
+                    duplexMode.Items.Add("Drukarka drukuje dwustronnie sama");
+                    duplexMode.Items.Add("Ręcznie — najpierw przody, potem przełożę kartki");
+                    details.Children.Add(duplexMode);
+                }
+                flipEdge = new ComboBox
+                {
+                    ItemsSource = new List<string>
+                    {
+                        "Obracanie kartki wzdłuż dłuższej krawędzi (jak stronę w książce)",
+                        "Obracanie kartki wzdłuż krótszej krawędzi (jak kartkę kalendarza)",
+                    },
+                    SelectedIndex = current.DuplexShortEdge ? 1 : 0,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+                details.Children.Add(flipEdge);
+                if (kind == OutputKind.Pdf)
+                {
+                    details.Children.Add(new TextBlock
+                    {
+                        Text = "W PDF po każdym arkuszu jest jego odwrocie — drukuj go dwustronnie, z takim samym obracaniem kartki.",
+                        FontSize = 12, Opacity = 0.75, TextWrapping = TextWrapping.Wrap,
+                    });
+                }
+                var align = new HyperlinkButton { Content = $"Wyrównanie stron… ({settings.DuplexAlignmentShort})", Padding = new Thickness(0, 2, 0, 2) };
+                align.Click += (_, _) => { next = OutputNext.AlignDuplex; dialogRef?.Hide(); };
+                details.Children.Add(align);
+                void SyncDetails() => details.Visibility = duplex.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+                duplex.Click += (_, _) => SyncDetails();
+                SyncDetails();
+                panel.Children.Add(duplex);
+                panel.Children.Add(details);
+            }
+            else if (outers.Exists(c => c.CanHaveInside))
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = "Chcesz teksty piosenek albo podziękowania na odwrocie okładki? Dodaj wnętrze karty: „+ KARTA” → „Wnętrze…”.",
+                    FontSize = 12, Opacity = 0.75, TextWrapping = TextWrapping.Wrap,
+                });
+            }
 
             if (kind == OutputKind.Pdf)
             {
@@ -587,11 +702,12 @@ public sealed partial class MainWindow
             CloseButtonText = "Anuluj",
             DefaultButton = ContentDialogButton.Primary,
         };
+        dialogRef = dlg;
         var result = await ShowDialogAsync(dlg);
-        if (result == ContentDialogResult.Secondary) return (null, true);
-        if (result != ContentDialogResult.Primary) return (null, false);
+        if (result == ContentDialogResult.Secondary) next = OutputNext.Calibrate;
+        else if (result != ContentDialogResult.Primary && next != OutputNext.AlignDuplex) return (null, OutputNext.Cancel);
 
-        return (new PrintOptions
+        var chosen = new PrintOptions
         {
             Dpi = dpi is null ? current.Dpi : dpi.SelectedIndex == 1 ? 600 : 300,
             IncludeBleed = bleed?.IsChecked == true,
@@ -600,19 +716,56 @@ public sealed partial class MainWindow
             FoldMarks = fold?.IsChecked ?? current.FoldMarks,
             AllCards = scope is null || scope.SelectedIndex == 0,
             FillPage = fill is { IsEnabled: true, IsChecked: true },
-            ApplyCalibration = calibrated?.IsChecked == true,
-        }, false);
+            ApplyCalibration = kind == OutputKind.Print || calibrated?.IsChecked == true,
+            Duplex = duplex?.IsChecked ?? current.Duplex,
+            DuplexManual = duplexMode is null ? current.DuplexManual : duplexMode.SelectedIndex == 1,
+            DuplexShortEdge = flipEdge is null ? current.DuplexShortEdge : flipEdge.SelectedIndex == 1,
+        };
+        // sposób druku dwustronnego zależy od drukarki — zapamiętaj go na następne uruchomienia
+        if (duplex is not null && (settings.DuplexManual != chosen.DuplexManual || settings.DuplexShortEdge != chosen.DuplexShortEdge))
+        {
+            settings.DuplexManual = chosen.DuplexManual;
+            settings.DuplexShortEdge = chosen.DuplexShortEdge;
+            settings.Save();
+        }
+        return (chosen, next);
     }
 
-    /// <summary>Pyta o opcje; „Kalibracja…” otwiera kalibrację i wraca do opcji.</summary>
+    /// <summary>Pyta o opcje; „Kalibracja…” i „Wyrównanie stron…” otwierają swoje okna i wracają do opcji.</summary>
     private async Task<PrintOptions?> AskOutputOptionsAsync(OutputKind kind, PrintOptions current)
     {
         while (true)
         {
-            var (opt, calibrate) = await ShowOutputOptionsAsync(kind, current);
-            if (!calibrate) return opt;
-            await CalibratePrinterAsync();
+            var (opt, next) = await ShowOutputOptionsAsync(kind, current);
+            switch (next)
+            {
+                case OutputNext.Go: return opt;
+                case OutputNext.Cancel: return null;
+                case OutputNext.Calibrate: await CalibratePrinterAsync(); break;
+                case OutputNext.AlignDuplex: await AlignDuplexAsync(opt ?? current); break;
+            }
+            if (opt is not null) current = opt; // wróć do okna z tym, co użytkownik już wybrał
         }
+    }
+
+    /// <summary>
+    /// Ręczny druk dwustronny: „przełóż kartki i drukuj tyły”. Gdy jest już otwarte inne okno
+    /// (np. wyrównanie stron), WinUI nie pokaże drugiego — wtedy systemowy komunikat.
+    /// </summary>
+    private async Task<bool> AskFlipAsync(string message)
+    {
+        const string title = "Druk dwustronny — przełóż kartki";
+        if (_dialogOpen)
+            return Native.MessageBoxW(_hwnd, message + "\n\nOK = drukuj tyły.", title, Native.MB_OKCANCEL | Native.MB_ICONINFORMATION) == Native.IDOK;
+        var dlg = new ContentDialog
+        {
+            Title = title,
+            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, MaxWidth = 460 },
+            PrimaryButtonText = "Drukuj tyły",
+            CloseButtonText = "Pomiń tyły",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        return await ShowDialogAsync(dlg) == ContentDialogResult.Primary;
     }
 
     private static int Px(double mm, int dpi) => (int)Math.Round(mm / 25.4 * dpi);
@@ -662,7 +815,7 @@ public sealed partial class MainWindow
         var opt = await AskOutputOptionsAsync(OutputKind.Print, _printOptions);
         if (opt is null) return;
         _printOptions = opt;
-        var r = await PrintService.PrintAsync(_hwnd, _session, opt);
+        var r = await PrintService.PrintAsync(_hwnd, _session, opt, AskFlipAsync);
         if (r.Error is not null) ShowToast(r.Error, InfoBarSeverity.Error);
         else if (r.Printed) ShowToast(r.Info ?? "Wysłano do drukarki.");
     }
@@ -759,5 +912,102 @@ public sealed partial class MainWindow
         settings.PrintOffsetY = -ey / ky;
         settings.Save();
         ShowToast($"Zapisano kalibrację: {settings.CalibrationText}.");
+    }
+
+    // ================================================================== wyrównanie stron (druk dwustronny)
+
+    /// <summary>
+    /// Pomocnik wyrównania stron: kartka testowa (miarki z przodu, gruby krzyżyk z tyłu) — pod światło widać,
+    /// o ile tył „ucieka”; wpisane przesunięcie jest korygowane przy każdym druku dwustronnym.
+    /// </summary>
+    private async Task AlignDuplexAsync(PrintOptions opt)
+    {
+        var settings = AppSettings.Current;
+        var fmt = MakeFormatter(1);
+        NumberBox Box(string header, double value) => new()
+        {
+            Header = header, Value = value, Minimum = -20, Maximum = 20, SmallChange = 0.5, LargeChange = 1,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact, NumberFormatter = fmt,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        var dx = Box("W prawo (+) / w lewo (−), mm", settings.DuplexOffsetX);
+        var dy = Box("W dół (+) / w górę (−), mm", settings.DuplexOffsetY);
+        var grid = new Grid { ColumnSpacing = 10 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        Grid.SetColumn(dy, 1);
+        grid.Children.Add(dx);
+        grid.Children.Add(dy);
+
+        string how = $"{(opt.DuplexManual ? "ręcznie (przełożysz kartkę)" : "drukarka sama")}, obracanie wzdłuż " +
+                     $"{(opt.DuplexShortEdge ? "krótszej" : "dłuższej")} krawędzi";
+        var status = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.75,
+            Text = $"Obecnie: {settings.DuplexAlignmentText}.\nKartka testowa: {how} — tak jak wybrano w oknie drukowania.",
+        };
+        var printTest = new Button { HorizontalAlignment = HorizontalAlignment.Stretch };
+        printTest.Content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 8,
+            Children = { new FontIcon { Glyph = "", FontSize = 13 }, new TextBlock { Text = "1. Wydrukuj kartkę testową (dwie strony)" } },
+        };
+        printTest.Click += async (_, _) =>
+        {
+            printTest.IsEnabled = false;
+            try
+            {
+                var r = await PrintService.PrintDuplexTestAsync(_hwnd, opt.DuplexManual, opt.DuplexShortEdge, AskFlipAsync);
+                status.Text = r.Error ?? r.Info ?? status.Text;
+            }
+            finally { printTest.IsEnabled = true; }
+        };
+
+        var panel = new StackPanel { Spacing = 12, MaxWidth = 520 };
+        panel.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap, FontSize = 13,
+            Text = "Przy druku dwustronnym tył kartki często wychodzi przesunięty o milimetr–dwa względem przodu. " +
+                   "Wydrukuj kartkę testową: z przodu są miarki, z tyłu gruby krzyżyk w kółku. Obejrzyj ją pod światło " +
+                   "od strony z miarkami i odczytaj, o ile środek krzyżyka jest przesunięty od zera.",
+        });
+        panel.Children.Add(printTest);
+        panel.Children.Add(new TextBlock { Text = "2. Wpisz, o ile krzyżyk z tyłu jest przesunięty (patrząc od przodu):", FontSize = 13, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(grid);
+        panel.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.75,
+            Text = "Napis „TYŁ” stoi do góry nogami? Zmień w oknie drukowania obracanie kartki (dłuższa ↔ krótsza krawędź). " +
+                   "Wpisane wartości zastępują poprzednią korektę — kartka testowa drukuje się bez niej.",
+        });
+        panel.Children.Add(status);
+
+        var dlg = new ContentDialog
+        {
+            Title = "Wyrównanie stron",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 560 },
+            PrimaryButtonText = "Zapisz",
+            SecondaryButtonText = settings.HasDuplexAlignment ? "Usuń korektę" : "",
+            CloseButtonText = "Anuluj",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        var result = await ShowDialogAsync(dlg);
+        if (result == ContentDialogResult.Secondary)
+        {
+            settings.DuplexOffsetX = settings.DuplexOffsetY = 0;
+            settings.Save();
+            ShowToast("Korekta wyrównania stron usunięta.", InfoBarSeverity.Informational);
+            return;
+        }
+        if (result != ContentDialogResult.Primary) return;
+        if (double.IsNaN(dx.Value) || double.IsNaN(dy.Value))
+        {
+            ShowToast("Nieprawidłowe wartości — korekta nie została zapisana.", InfoBarSeverity.Warning);
+            return;
+        }
+        settings.DuplexOffsetX = Math.Round(dx.Value, 2);
+        settings.DuplexOffsetY = Math.Round(dy.Value, 2);
+        settings.Save();
+        ShowToast($"Zapisano wyrównanie stron: {settings.DuplexAlignmentText}.");
     }
 }

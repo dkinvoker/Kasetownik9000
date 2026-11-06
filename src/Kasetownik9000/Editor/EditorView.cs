@@ -28,6 +28,7 @@ public sealed partial class EditorView : UserControl
     private static readonly Color Orange = Color.FromArgb(255, 232, 114, 44);
     private static readonly Color Teal = Color.FromArgb(255, 62, 142, 135);
     private static readonly Color Magenta = Color.FromArgb(255, 255, 79, 163);
+    private static readonly Color Mustard = Color.FromArgb(255, 242, 176, 53);
 
     private readonly CanvasControl _canvas;
     private readonly CanvasStrokeStyle _dash = new() { DashStyle = CanvasDashStyle.Dash };
@@ -278,6 +279,14 @@ public sealed partial class EditorView : UserControl
             {
                 ds.DrawText($"{p.Name.ToUpperInvariant()} · {p.Height:0.#}", rect, Cream, _labelFormat);
             }
+        }
+
+        // wnętrze karty: przypomnienie, jak je czytać
+        if (doc.IsInside)
+        {
+            float ty = ToScreen(0, -Math.Max(0, doc.Bleed)).Y - 44;
+            ds.DrawText("WNĘTRZE · DRUGA STRONA KARTKI — WIDOK PO ODWRÓCENIU (LEWA ↔ PRAWA)",
+                new Rect(tl.X, ty, Math.Max(200, br.X - tl.X), 18), Mustard, _dimFormat);
         }
 
         // wymiar szerokości nad kartą

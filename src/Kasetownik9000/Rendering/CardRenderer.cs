@@ -277,19 +277,33 @@ public static class CardRenderer
         }
 
         var interp = highQuality ? CanvasImageInterpolation.HighQualityCubic : CanvasImageInterpolation.Linear;
-        switch (img.Filter)
+        var baseT = ds.Transform;
+        if (img.FlipX || img.FlipY)
         {
-            case ImageFilter.Grayscale:
-                using (var fx = new GrayscaleEffect { Source = bmp })
-                    ds.DrawImage(fx, dest, src, 1f, interp);
-                break;
-            case ImageFilter.Sepia:
-                using (var fx = new SepiaEffect { Source = bmp, Intensity = 0.9f })
-                    ds.DrawImage(fx, dest, src, 1f, interp);
-                break;
-            default:
-                ds.DrawImage(bmp, dest, src, 1f, interp);
-                break;
+            // odbicie wokół środka ramki — przy „zmieść cały obraz” obraz i tak jest w niej wyśrodkowany
+            var c = new Vector2((float)(img.X + img.Width / 2), (float)(img.Y + img.Height / 2));
+            ds.Transform = Matrix3x2.CreateScale(img.FlipX ? -1 : 1, img.FlipY ? -1 : 1, c) * baseT;
+        }
+        try
+        {
+            switch (img.Filter)
+            {
+                case ImageFilter.Grayscale:
+                    using (var fx = new GrayscaleEffect { Source = bmp })
+                        ds.DrawImage(fx, dest, src, 1f, interp);
+                    break;
+                case ImageFilter.Sepia:
+                    using (var fx = new SepiaEffect { Source = bmp, Intensity = 0.9f })
+                        ds.DrawImage(fx, dest, src, 1f, interp);
+                    break;
+                default:
+                    ds.DrawImage(bmp, dest, src, 1f, interp);
+                    break;
+            }
+        }
+        finally
+        {
+            ds.Transform = baseT;
         }
     }
 

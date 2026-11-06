@@ -131,8 +131,33 @@ internal static unsafe partial class Native
     [LibraryImport("kernel32.dll")]
     internal static partial nint GlobalFree(nint hMem);
 
+    [LibraryImport("kernel32.dll")]
+    internal static partial nint GlobalLock(nint hMem);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GlobalUnlock(nint hMem);
+
+    // ---- druk dwustronny (DEVMODEW.dmFields/dmDuplex) ----
+    public const uint DM_DUPLEX = 0x1000;
+    public const short DMDUP_SIMPLEX = 1, DMDUP_VERTICAL = 2, DMDUP_HORIZONTAL = 3;
+    public const int DevModeFieldsOffset = 72, DevModeDuplexOffset = 94;
+    public const ushort DC_DUPLEX = 7;
+
+    [LibraryImport("gdi32.dll")]
+    internal static partial nint ResetDCW(nint hdc, nint devmode);
+
+    [LibraryImport("winspool.drv", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial int DeviceCapabilitiesW(string device, string? port, ushort capability, nint output, nint devmode);
+
     [LibraryImport("user32.dll")]
     internal static partial uint GetDpiForWindow(nint hwnd);
+
+    public const uint MB_OKCANCEL = 0x1, MB_ICONINFORMATION = 0x40;
+    public const int IDOK = 1;
+
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial int MessageBoxW(nint hwnd, string text, string caption, uint type);
 
     public static uint Rgb(byte r, byte g, byte b) => (uint)(r | (g << 8) | (b << 16));
 }

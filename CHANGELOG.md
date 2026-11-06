@@ -3,6 +3,30 @@
 Numer wersji jest w jednym miejscu: `src/Directory.Build.props` (`<Version>`).
 Widać go na pasku tytułu aplikacji, w oknie „?” i we właściwościach pliku exe.
 
+## 1.7 — 2026-11-06
+
+### Nowe
+- **Wnętrze karty i druk dwustronny.** „+ KARTA” → „Wnętrze karty…” (albo prawy przycisk na zakładce) dodaje
+  drugą stronę kartki jako zakładkę „J-card · wnętrze”, od razu z miejscem na teksty piosenek i podziękowania.
+  Wnętrze ma zawsze wymiary i panele swojej karty. Projektuje się je tak, jak widać kartkę po odwróceniu
+  (lewa ↔ prawa), a przy druku trafia na odwrocie arkusza, dokładnie za swoją kartą.
+  - Drukarka z dupleksem dostaje jedno zadanie (przód, tył…); bez dupleksu albo na życzenie — najpierw przody,
+    potem okno „przełóż kartki” i tyły. Gdy drukarka nie umie drukować dwustronnie, aplikacja sama przechodzi
+    na tryb ręczny.
+  - Obracanie kartki wzdłuż dłuższej krawędzi (jak strona w książce) albo krótszej (jak kalendarz) —
+    zapamiętywane razem z trybem.
+  - **Wyrównanie stron:** kartka testowa z miarkami z przodu i krzyżykiem z tyłu; pod światło widać, o ile tył
+    jest przesunięty, a wpisana korekta działa przy każdym druku dwustronnym.
+  - PDF: po każdym arkuszu jego odwrocie. Linia poleceń: `--inside`, `--no-duplex`, `--duplex-short`,
+    `--print-duplex-test`.
+- **Odbicie lustrzane obrazów** — w poziomie i w pionie (przyciski w panelu „Obraz” i w menu pod prawym przyciskiem).
+
+### Poprawki
+- **Kopiuj/wklej elementów (Ctrl+C, Ctrl+V) nie działało.** Windows oddawał skopiowany element jako strumień
+  bajtów, a nie tekst, więc wklejanie po cichu nic nie robiło (dla tekstów wklejał się tylko goły tekst bez
+  formatowania). Teraz wkleja się pełny element razem z obrazem, jak przy Ctrl+D. Kolejne wklejenia układają się
+  kaskadą, a skopiowany obraz można też wkleić w innym programie (np. w Paincie).
+
 ## 1.6.1 — 2026-11-05
 
 ### Poprawki

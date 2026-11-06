@@ -4,7 +4,7 @@ Aplikacja do projektowania i drukowania okładek na kasety magnetofonowe — J-c
 i naklejki na kasetę — z kalkulatorem taśmy i podglądem 3D. WinUI 3 + Win2D, skompilowana do
 **Native AOT** (okno pojawia się w ułamku sekundy), z wyglądem prosto z magnetofonu z lat 80.
 
-**Wersja 1.6.1** — co się zmieniało, opisuje [CHANGELOG.md](CHANGELOG.md), a pomysły na dalszy rozwój
+**Wersja 1.7** — co się zmieniało, opisuje [CHANGELOG.md](CHANGELOG.md), a pomysły na dalszy rozwój
 [Developement.md](Developement.md).
 
 ![ikona](src/Kasetownik9000/Assets/AppIcon.png)
@@ -40,17 +40,26 @@ i naklejki na kasetę — z kalkulatorem taśmy i podglądem 3D. WinUI 3 + Win2D
 - **Tekst**: dowolna czcionka systemowa, rozmiar w pt, kolor, pogrubienie/kursywa/WIELKIE LITERY,
   wyrównanie w poziomie i pionie, odstęp liter, interlinia, **automatyczne dopasowanie do ramki**
   (idealne na grzbiet), retro cień.
-- **Obraz**: wypełnij/zmieść/rozciągnij, filtry czarno-biały i sepia; obrazy są osadzane w pliku projektu.
-  Można je przeciągnąć z Eksploratora albo wkleić ze schowka.
+- **Obraz**: wypełnij/zmieść/rozciągnij, filtry czarno-biały i sepia, **odbicie lustrzane** w poziomie
+  i w pionie; obrazy są osadzane w pliku projektu. Można je przeciągnąć z Eksploratora albo wkleić ze schowka.
 - **Edycja myszką**: przeciąganie, uchwyty skalowania i obrotu, przyciąganie do krawędzi paneli,
   środka karty i innych elementów (Alt wyłącza), Shift = proporcje / linia prosta / obrót co 15°.
-- Warstwy (kolejność, blokada, ukrywanie), cofnij/ponów, kopiuj/wklej (także między oknami), duplikuj.
+- Warstwy (kolejność, blokada, ukrywanie), cofnij/ponów, kopiuj/wklej (także między oknami — skopiowany
+  obraz wkleisz też np. w Paincie), duplikuj.
 - **Druk 1:1** przez systemowe okno drukowania, ze znacznikami cięcia i zgięcia: **cały komplet na jednym
   arkuszu** (np. J-card + naklejki A/B na A4) albo kopie jednej karty. Spad (domyślnie 1 mm) chroni przed
   białymi brzegami.
+- **Wnętrze karty i druk dwustronny**: „+ KARTA” → „Wnętrze…” dodaje drugą stronę kartki (np. na teksty
+  piosenek i podziękowania) jako osobną zakładkę z tymi samymi panelami. Projektuje się ją tak, jak widać
+  kartkę po odwróceniu (lewa ↔ prawa); przy druku trafia na odwrocie, dokładnie za swoją kartą. Drukarka
+  z dupleksem drukuje obie strony sama, bez dupleksu — najpierw przody, potem po przełożeniu kartek tyły.
+  Do wyboru obracanie kartki wzdłuż dłuższej albo krótszej krawędzi. **Wyrównanie stron**: kartka testowa
+  (miarki z przodu, krzyżyk z tyłu) — pod światło widać, o ile tył „ucieka”, a wpisana korekta działa przy
+  każdym druku.
 - **Kalibracja drukarki**: strona testowa z miarkami — po wpisaniu pomiarów wydruki są korygowane
   (wiele drukarek drukuje 98–99% rozmiaru).
-- **Eksport PDF** (A4/Letter, rzeczywisty rozmiar, 600 DPI, wiele arkuszy) i **PNG** (300/600 DPI).
+- **Eksport PDF** (A4/Letter, rzeczywisty rozmiar, 600 DPI, wiele arkuszy, przy wnętrzach — strony przód/tył
+  na przemian) i **PNG** (300/600 DPI).
 - **Podgląd 3D** (klawisz „3D PODGLĄD” albo F3): J-karta złożona wokół kasety w przezroczystym pudełku,
   na kasecie Twoje naklejki, obracanie myszą, widoki przód / 3/4 / grzbiet / tył, automatyczny obrót,
   pudełko i okładkę można ukryć, zapis **mockupu PNG** i **animacji GIF**. Odświeża się na żywo.
@@ -106,6 +115,9 @@ dopisywać do PATH. Numer wersji zmienia się w `src/Directory.Build.props`.
    najlepiej po wcześniejszym nagnieceniu linii tępą stroną noża i linijką.
 5. W naklejkach wytnij białe okienko („wytnij”) nożykiem przy linijce, zanim przykleisz naklejkę na kasetę —
    magnetofon musi mieć dostęp do szpul.
+6. Druk dwustronny (wnętrze karty): za pierwszym razem wydrukuj kartkę testową w „Wyrównanie stron…”
+   (w oknie drukowania) — od razu widać, jak włożyć kartkę przy druku ręcznym i o ile przesuwa się tył.
+   Spad na wnętrzu też jest — milimetr przesunięcia nie zostawi białego paska.
 
 ## Skróty klawiszowe
 
@@ -132,11 +144,15 @@ Kasetownik9000.exe projekt.kaseta --export-3d mockup.png --yaw -28 --pitch 24 --
 Kasetownik9000.exe projekt.kaseta --export-gif obrot.gif
 Kasetownik9000.exe projekt.kaseta --print "Nazwa drukarki"
 Kasetownik9000.exe --print-calibration "Nazwa drukarki"
+Kasetownik9000.exe --format jcard4 --starter kraft --komplet --inside --export-pdf dwustronnie.pdf
+Kasetownik9000.exe --print-duplex-test "Nazwa drukarki"
 ```
 
 Formaty: `jcard`, `jcard4`, `jcard5`, `jcard-long`, `labels`, `custom`.
 Style: `retro`, `minimal`, `mixtape`, `synthwave`, `video`, `chrome`, `punk`, `kraft`, `swiss`, `empty`.
 PDF i druk obejmują cały komplet kart, chyba że podasz `--card N` albo `--fill`.
+`--inside` dodaje do nowego projektu wnętrze J-karty; wnętrza idą na odwrocie arkusza (`--no-duplex` je pomija,
+`--duplex-short` = obracanie kartki wzdłuż krótszej krawędzi).
 
 ## Struktura
 

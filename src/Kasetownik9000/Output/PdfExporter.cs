@@ -27,8 +27,17 @@ public static class Exporter
         double sx = opt.ApplyCalibration ? settings.PrintScaleX : 1, sy = opt.ApplyCalibration ? settings.PrintScaleY : 1;
         double ox = opt.ApplyCalibration ? settings.PrintOffsetX : 0, oy = opt.ApplyCalibration ? settings.PrintOffsetY : 0;
 
+        // strony PDF: przód arkusza, a przy druku dwustronnym zaraz po nim jego odwrocie (wnętrza kart)
+        bool duplex = layout.HasBack;
+        var sides = new List<(List<PlacedCard> Cards, List<MarkLine> Marks)>();
+        foreach (var sheet in layout.Pages)
+        {
+            sides.Add((sheet.Cards, sheet.Marks));
+            if (duplex) sides.Add((sheet.Back, []));
+        }
+
         // obrazy kart (każda karta raz, nawet gdy jest na arkuszu kilka razy)
-        var used = layout.Pages.SelectMany(p => p.Cards).Select(c => c.CardIndex).Distinct().ToList();
+        var used = sides.SelectMany(p => p.Cards).Select(c => c.CardIndex).Distinct().ToList();
         var images = new Dictionary<int, (int W, int H, byte[] Data)>();
         foreach (var idx in used)
         {
@@ -48,7 +57,7 @@ public static class Exporter
         int firstImage = 3;
         var imageObj = used.Select((idx, i) => (idx, num: firstImage + i)).ToDictionary(x => x.idx, x => x.num);
         int firstPage = firstImage + used.Count;
-        int infoObj = firstPage + layout.Pages.Count * 2;
+        int infoObj = firstPage + sides.Count * 2;
 
         await using var fs = File.Create(path);
         var offsets = new SortedDictionary<int, long>();
@@ -68,8 +77,8 @@ public static class Exporter
 
         W("%PDF-1.4\n%âãÏÓ\n");
         Obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
-        var kids = string.Join(" ", Enumerable.Range(0, layout.Pages.Count).Select(i => $"{firstPage + i * 2} 0 R"));
-        Obj(2, $"<< /Type /Pages /Kids [{kids}] /Count {layout.Pages.Count} >>");
+        var kids = string.Join(" ", Enumerable.Range(0, sides.Count).Select(i => $"{firstPage + i * 2} 0 R"));
+        Obj(2, $"<< /Type /Pages /Kids [{kids}] /Count {sides.Count} >>");
 
         foreach (var idx in used)
         {
@@ -77,28 +86,31 @@ public static class Exporter
             Stream(imageObj[idx], $"/Type /XObject /Subtype /Image /Width {w} /Height {h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", data);
         }
 
-        for (int p = 0; p < layout.Pages.Count; p++)
+        for (int p = 0; p < sides.Count; p++)
         {
-            var page = layout.Pages[p];
+            var (placed, marks) = sides[p];
             int pageNum = firstPage + p * 2, contentNum = pageNum + 1;
-            var xobjects = string.Join(" ", page.Cards.Select(c => c.CardIndex).Distinct().Select(i => $"/Im{i} {imageObj[i]} 0 R"));
+            var xobjects = string.Join(" ", placed.Select(c => c.CardIndex).Distinct().Select(i => $"/Im{i} {imageObj[i]} 0 R"));
             Obj(pageNum, $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {F(pageW * pt)} {F(pageH * pt)}] " +
                          $"/Resources << /XObject << {xobjects} >> >> /Contents {contentNum} 0 R >>");
 
             var content = new StringBuilder();
-            foreach (var pc in page.Cards)
+            foreach (var pc in placed)
             {
                 var card = cards[pc.CardIndex];
                 double b = Math.Max(0, card.Bleed);
                 double left = pc.Position.X - b, topMm = pc.Position.Y - b;
                 double wPt = (card.Width + 2 * b) * sx * pt, hPt = (card.Height + 2 * b) * sy * pt;
                 double x = PX(left), y = PY(topMm + card.Height + 2 * b);
-                content.Append($"q {F(wPt)} 0 0 {F(hPt)} {F(x)} {F(y)} cm /Im{pc.CardIndex} Do Q\n");
+                // obrócona o 180° (odwrocie przy obracaniu kartki wzdłuż krótszej krawędzi): ta sama ramka, odwrócone osie
+                content.Append(pc.Rotated
+                    ? $"q {F(-wPt)} 0 0 {F(-hPt)} {F(x + wPt)} {F(y + hPt)} cm /Im{pc.CardIndex} Do Q\n"
+                    : $"q {F(wPt)} 0 0 {F(hPt)} {F(x)} {F(y)} cm /Im{pc.CardIndex} Do Q\n");
             }
             foreach (var fold in new[] { false, true })
             {
                 content.Append(fold ? "0.5 G 0.5 w\n" : "0 G 0.5 w\n");
-                foreach (var m in page.Marks.Where(m => m.Fold == fold))
+                foreach (var m in marks.Where(m => m.Fold == fold))
                     content.Append($"{F(PX(m.X1))} {F(PY(m.Y1))} m {F(PX(m.X2))} {F(PY(m.Y2))} l S\n");
             }
             Stream(contentNum, "", Encoding.ASCII.GetBytes(content.ToString()));
@@ -113,7 +125,7 @@ public static class Exporter
         foreach (var o in offsets.Values) sb.Append($"{o:D10} 00000 n \n");
         sb.Append($"trailer\n<< /Size {infoObj + 1} /Root 1 0 R /Info {infoObj} 0 R >>\nstartxref\n{xref}\n%%EOF\n");
         W(sb.ToString());
-        return (layout.CardCount, layout.Pages.Count);
+        return (layout.CardCount, sides.Count);
     }
 
     private static byte[] Deflate(byte[] bgra)

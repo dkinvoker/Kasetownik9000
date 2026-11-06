@@ -51,6 +51,7 @@ public sealed class EditorSession
     public EditorSession(CardProject project)
     {
         if (project.Cards.Count == 0) project.Cards.Add(CardFormats.Get("jcard").CreateDocument());
+        project.SyncInsides();
         Project = project;
         Resolver = new TextResolver(project);
         Assets.BitmapLoaded += () => Changed?.Invoke(ChangeFlags.Visual);
@@ -92,13 +93,43 @@ public sealed class EditorSession
         Changed?.Invoke(ChangeFlags.All);
     }
 
+    /// <summary>Usuwa kartę; razem z kartą zewnętrzną znika jej wnętrze (druga strona tej samej kartki).</summary>
     public void RemoveCard(int index)
     {
-        if (Project.Cards.Count <= 1 || index < 0 || index >= Project.Cards.Count) return;
+        if (index < 0 || index >= Project.Cards.Count) return;
+        var card = Project.Cards[index];
+        var remove = new List<CardDocument> { card };
+        if (Project.InsideOf(card) is { } inside) remove.Add(inside);
+        if (Project.Cards.Count - remove.Count < 1) return;
+        var active = Doc;
         BeginEdit();
-        Project.Cards.RemoveAt(index);
-        ActiveIndex = Math.Clamp(ActiveIndex >= index ? ActiveIndex - 1 : ActiveIndex, 0, Project.Cards.Count - 1);
+        foreach (var c in remove) Project.Cards.Remove(c);
+        int keep = Project.Cards.IndexOf(active);
+        ActiveIndex = keep >= 0 ? keep : Math.Clamp(index - 1, 0, Project.Cards.Count - 1);
         Selected = null;
+        SelectionChanged?.Invoke();
+        Changed?.Invoke(ChangeFlags.All);
+    }
+
+    /// <summary>Dodaje wnętrze (drugą stronę kartki) karty zewnętrznej — tuż za nią — i przełącza na nie.</summary>
+    public void AddInside(CardDocument outer)
+    {
+        if (!outer.CanHaveInside || Project.InsideOf(outer) is not null) return;
+        var inside = new CardDocument
+        {
+            Name = $"{outer.Name} · wnętrze",
+            InsideOf = outer.Id,
+            FormatId = outer.FormatId,
+            Width = outer.Width,
+            Bleed = outer.Bleed,
+            Panels = [.. outer.Panels.Select(p => p.Clone())],
+        };
+        Starters.ApplyInside(inside, outer);
+        BeginEdit();
+        Project.Cards.Insert(Project.Cards.IndexOf(outer) + 1, inside);
+        ActiveIndex = Project.Cards.IndexOf(inside);
+        Selected = null;
+        _lastKey = null;
         SelectionChanged?.Invoke();
         Changed?.Invoke(ChangeFlags.All);
     }
@@ -127,7 +158,12 @@ public sealed class EditorSession
     /// <summary>Zamyka scalanie — następna edycja zawsze tworzy nowy krok.</summary>
     public void BreakCoalescing() => _lastKey = null;
 
-    public void NotifyChanged(ChangeFlags flags) => Changed?.Invoke(flags);
+    public void NotifyChanged(ChangeFlags flags)
+    {
+        // wnętrza kart mają zawsze wymiary i panele swojej karty zewnętrznej (tanie — kilka kart)
+        Project.SyncInsides();
+        Changed?.Invoke(flags);
+    }
 
     public void Edit(string? key, Action change, ChangeFlags flags = ChangeFlags.Visual | ChangeFlags.Properties)
     {

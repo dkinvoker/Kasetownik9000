@@ -21,17 +21,27 @@ public sealed class PrintOptions
     /// <summary>Uwzględnij kalibrację drukarki z ustawień (druk zawsze, PDF — opcjonalnie).</summary>
     public bool ApplyCalibration { get; set; }
 
+    /// <summary>Druk dwustronny: wnętrza kart (druga strona kartki) trafiają na odwrocie arkusza.</summary>
+    public bool Duplex { get; set; } = true;
+    /// <summary>Ręcznie: najpierw przody, potem użytkownik przekłada kartki i drukujemy tyły.</summary>
+    public bool DuplexManual { get; set; }
+    /// <summary>Kartkę obraca się wzdłuż krótszej krawędzi (jak kalendarz) zamiast dłuższej (jak stronę książki).</summary>
+    public bool DuplexShortEdge { get; set; }
+
     public (double W, double H) PaperMm => Paper == PaperSize.Letter ? (215.9, 279.4) : (210, 297);
 }
 
 public readonly record struct MarkLine(double X1, double Y1, double X2, double Y2, bool Fold);
 
-public sealed record PlacedCard(int CardIndex, Point Position);
+/// <param name="Rotated">Na odwrocie przy obracaniu wzdłuż krótszej krawędzi karta leży „do góry nogami”.</param>
+public sealed record PlacedCard(int CardIndex, Point Position, bool Rotated = false);
 
 public sealed class SheetPage
 {
     public List<PlacedCard> Cards { get; } = [];
     public List<MarkLine> Marks { get; } = [];
+    /// <summary>Odwrocie arkusza: wnętrza kart, już w układzie tylnej strony (odbite względem przodu).</summary>
+    public List<PlacedCard> Back { get; } = [];
 }
 
 /// <summary>Rozmieszczenie kart na arkuszach + znaczniki cięcia i zgięcia (wszystko w mm).</summary>
@@ -42,6 +52,20 @@ public sealed class SheetLayout
     public List<SheetPage> Pages { get; } = [];
 
     public int CardCount => Pages.Sum(p => p.Cards.Count);
+
+    /// <summary>Czy któraś karta ma wnętrze do wydrukowania na odwrocie.</summary>
+    public bool HasBack => Pages.Exists(p => p.Back.Count > 0);
+
+    /// <summary>
+    /// To samo miejsce kartki widziane od tyłu. Obracanie wzdłuż dłuższej krawędzi: lewa ↔ prawa;
+    /// wzdłuż krótszej: góra ↔ dół, a cała tylna strona jest obrócona o 180°.
+    /// <paramref name="shiftX"/>/<paramref name="shiftY"/> — zmierzone przesunięcie tyłu względem przodu (patrząc od przodu), które korygujemy.
+    /// </summary>
+    public static (Point Position, bool Rotated) MirrorToBack(double x, double y, double w, double h,
+        double pageW, double pageH, bool shortEdge, double shiftX = 0, double shiftY = 0) =>
+        shortEdge
+            ? (new Point(x - shiftX, pageH - y - h + shiftY), true)
+            : (new Point(pageW - x - w + shiftX, y - shiftY), false);
 
     private static double Spacing(CardDocument c) => Math.Max(14, 2 * Math.Max(0, c.Bleed) + 12);
 
@@ -117,6 +141,25 @@ public sealed class SheetLayout
         foreach (var page in layout.Pages)
             foreach (var pc in page.Cards)
                 AddMarks(page, cards[pc.CardIndex], pc.Position, opt);
+
+        if (opt.Duplex)
+        {
+            var s = AppSettings.Current;
+            double ax = opt.ApplyCalibration ? s.DuplexOffsetX : 0, ay = opt.ApplyCalibration ? s.DuplexOffsetY : 0;
+            foreach (var page in layout.Pages)
+            {
+                foreach (var pc in page.Cards)
+                {
+                    var outer = cards[pc.CardIndex];
+                    int inside = -1;
+                    for (int i = 0; i < cards.Count; i++)
+                        if (cards[i].InsideOf == outer.Id) { inside = i; break; }
+                    if (inside < 0) continue;
+                    var (pos, rotated) = MirrorToBack(pc.Position.X, pc.Position.Y, outer.Width, outer.Height, pageW, pageH, opt.DuplexShortEdge, ax, ay);
+                    page.Back.Add(new PlacedCard(inside, pos, rotated));
+                }
+            }
+        }
         return layout;
     }
 
@@ -181,7 +224,19 @@ public static class CardRasterizer
         return rt;
     }
 
-    /// <summary>Które karty drukować: cały komplet albo tylko aktywna.</summary>
-    public static List<int> CardsToPrint(Editor.EditorSession s, PrintOptions opt) =>
-        opt.AllCards ? [.. Enumerable.Range(0, s.Project.Cards.Count)] : [s.ActiveIndex];
+    /// <summary>
+    /// Które karty drukować (na przodzie arkusza): cały komplet albo tylko aktywna. Wnętrza nie są osobnymi
+    /// kartami — idą na odwrocie swojej karty; gdy aktywne jest wnętrze, drukujemy jego kartę zewnętrzną.
+    /// </summary>
+    public static List<int> CardsToPrint(Editor.EditorSession s, PrintOptions opt)
+    {
+        var cards = s.Project.Cards;
+        if (opt.AllCards) return [.. Enumerable.Range(0, cards.Count).Where(i => !cards[i].IsInside)];
+        var outer = s.Doc.IsInside ? s.Project.OuterOf(s.Doc) : null;
+        return [outer is null ? s.ActiveIndex : cards.IndexOf(outer)];
+    }
+
+    /// <summary>Obraca bitmapę BGRA o 180° (odwrocie przy obracaniu kartki wzdłuż krótszej krawędzi).</summary>
+    public static void Rotate180(byte[] bgra) =>
+        System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(bgra.AsSpan()).Reverse();
 }

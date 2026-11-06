@@ -28,6 +28,30 @@ public sealed class AppSettings
         PrintOffsetX = PrintOffsetY = 0;
     }
 
+    /// <summary>
+    /// Druk dwustronny: o ile tył kartki wychodzi przesunięty względem przodu (patrząc od przodu, pod światło):
+    /// X dodatnie = w prawo, Y dodatnie = w dół. Korygujemy to przy drukowaniu odwrocia.
+    /// </summary>
+    public double DuplexOffsetX { get; set; }
+    public double DuplexOffsetY { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasDuplexAlignment => Math.Abs(DuplexOffsetX) > 1e-6 || Math.Abs(DuplexOffsetY) > 1e-6;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string DuplexAlignmentText => HasDuplexAlignment
+        ? $"tył przesunięty o {DuplexOffsetX:+0.0;-0.0;0} mm w poziomie i {DuplexOffsetY:+0.0;-0.0;0} mm w pionie — korygowane"
+        : "brak korekty";
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string DuplexAlignmentShort => HasDuplexAlignment
+        ? $"korekta {DuplexOffsetX:+0.0;-0.0;0} / {DuplexOffsetY:+0.0;-0.0;0} mm"
+        : "brak korekty";
+
+    /// <summary>Ostatnio wybrany sposób druku dwustronnego (zapamiętany między uruchomieniami).</summary>
+    public bool DuplexManual { get; set; }
+    public bool DuplexShortEdge { get; set; }
+
     // ------------------------------------------------------------------ zapis
 
     private static string FilePath =>

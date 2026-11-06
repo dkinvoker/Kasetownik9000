@@ -29,8 +29,9 @@ public sealed partial class MainWindow : Window
     private readonly nint _hwnd;
     private readonly DispatcherQueueTimer _toastTimer;
 
-    private PrintOptions _printOptions = new();
-    private PrintOptions _pdfOptions = new();
+    // sposób druku dwustronnego zależy od drukarki — zapamiętany w ustawieniach
+    private PrintOptions _printOptions = new() { DuplexManual = AppSettings.Current.DuplexManual, DuplexShortEdge = AppSettings.Current.DuplexShortEdge };
+    private PrintOptions _pdfOptions = new() { DuplexShortEdge = AppSettings.Current.DuplexShortEdge };
     private PrintOptions _pngOptions = new() { Dpi = 300 };
 
     public MainWindow()
@@ -191,8 +192,21 @@ public sealed partial class MainWindow : Window
             menu.Items.Add(rename);
             var remove = new MenuFlyoutItem { Text = "Usuń kartę", Icon = new FontIcon { Glyph = "" }, IsEnabled = cards.Count > 1 };
             remove.Click += (_, _) => _session.RemoveCard(index);
+            if (_session.Project.InsideOf(card) is not null)
+            {
+                remove.Text = "Usuń kartę (razem z wnętrzem)";
+                remove.IsEnabled = cards.Count > 2;
+            }
+            if (card.CanHaveInside && _session.Project.InsideOf(card) is null)
+            {
+                var addInside = new MenuFlyoutItem { Text = "Dodaj wnętrze (druga strona kartki)", Icon = new FontIcon { Glyph = "" } };
+                addInside.Click += (_, _) => AddInside(card);
+                menu.Items.Add(addInside);
+            }
             menu.Items.Add(remove);
             tab.ContextFlyout = menu;
+            if (card.IsInside)
+                ToolTipService.SetToolTip(tab, $"{card.Name} — druga strona kartki „{_session.Project.OuterOf(card)?.Name}” (druk dwustronny)");
 
             CardTabsHost.Children.Add(tab);
         }
@@ -201,19 +215,44 @@ public sealed partial class MainWindow : Window
     private void SetupAddCardMenu()
     {
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
-        foreach (var f in CardFormats.All)
+        // menu budowane przy każdym otwarciu — lista „Wnętrze…” zależy od kart w projekcie
+        menu.Opening += (_, _) =>
         {
-            var item = new MenuFlyoutItem { Text = $"{f.Name}  ·  {f.SizeText}" };
-            item.Click += (_, _) =>
+            menu.Items.Clear();
+            foreach (var f in CardFormats.All)
             {
-                var doc = f.CreateDocument();
-                Starters.Apply(doc, _session.Project.StyleId);
-                _session.AddCard(doc);
-                ShowToast($"Dodano kartę „{doc.Name}” — przełączaj karty zakładkami nad płótnem.", InfoBarSeverity.Informational);
-            };
-            menu.Items.Add(item);
-        }
+                var item = new MenuFlyoutItem { Text = $"{f.Name}  ·  {f.SizeText}" };
+                item.Click += (_, _) =>
+                {
+                    var doc = f.CreateDocument();
+                    Starters.Apply(doc, _session.Project.StyleId);
+                    _session.AddCard(doc);
+                    ShowToast($"Dodano kartę „{doc.Name}” — przełączaj karty zakładkami nad płótnem.", InfoBarSeverity.Informational);
+                };
+                menu.Items.Add(item);
+            }
+            var project = _session.Project;
+            var candidates = project.Cards.Where(c => c.CanHaveInside && project.InsideOf(c) is null).ToList();
+            if (candidates.Count > 0) menu.Items.Add(new MenuFlyoutSeparator());
+            foreach (var outer in candidates)
+            {
+                var item = new MenuFlyoutItem
+                {
+                    Text = $"Wnętrze karty „{outer.Name}” — druga strona kartki (druk dwustronny)",
+                    Icon = new FontIcon { Glyph = "" },
+                };
+                item.Click += (_, _) => AddInside(outer);
+                menu.Items.Add(item);
+            }
+        };
         AddCardButton.Flyout = menu;
+    }
+
+    private void AddInside(CardDocument outer)
+    {
+        _session.AddInside(outer);
+        ShowToast("Dodano wnętrze: projektuj je tak, jak widać kartkę po odwróceniu (lewa ↔ prawa). " +
+                  "Przy druku trafi na odwrocie karty.", InfoBarSeverity.Informational);
     }
 
     private async Task RenameCardAsync(int index)
@@ -511,8 +550,8 @@ public sealed partial class MainWindow : Window
                 case VirtualKey.Z: _session.Undo(); break;
                 case VirtualKey.Y: _session.Redo(); break;
                 case VirtualKey.D: _session.DuplicateSelected(); break;
-                case VirtualKey.C: CopySelected(); break;
-                case VirtualKey.X: if (CopySelected()) _session.DeleteSelected(); break;
+                case VirtualKey.C: e.Handled = true; await CopySelectedAsync(); return;
+                case VirtualKey.X: e.Handled = true; if (await CopySelectedAsync()) _session.DeleteSelected(); return;
                 case VirtualKey.V: e.Handled = true; await PasteAsync(null); return;
                 default: return;
             }
@@ -562,7 +601,7 @@ public sealed partial class MainWindow : Window
         if (hit is not null)
         {
             Add("Duplikuj", "", "Ctrl+D", _session.DuplicateSelected);
-            Add("Kopiuj", "", "Ctrl+C", () => CopySelected());
+            Add("Kopiuj", "", "Ctrl+C", async () => await CopySelectedAsync());
             Add("Usuń", "", "Del", _session.DeleteSelected);
             menu.Items.Add(new MenuFlyoutSeparator());
             Add("Na wierzch", "", null, () => _session.Reorder(EditorSession.Order.Front));
@@ -570,7 +609,17 @@ public sealed partial class MainWindow : Window
             Add("Niżej", "", null, () => _session.Reorder(EditorSession.Order.Backward));
             Add("Na spód", "", null, () => _session.Reorder(EditorSession.Order.Back));
             menu.Items.Add(new MenuFlyoutSeparator());
-            Add("Rozciągnij na panel", "", null, () => FillPanel_Click(this, new RoutedEventArgs()));
+            if (hit is ImageElement)
+            {
+                foreach (var (text, symbol, flipX) in new[] { ("Odbij w poziomie", "⇆", true), ("Odbij w pionie", "⇅", false) })
+                {
+                    var item = new MenuFlyoutItem { Text = text, Icon = new FontIcon { Glyph = symbol, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe UI Symbol") } };
+                    item.Click += (_, _) => Edit<ImageElement>(null, i => { if (flipX) i.FlipX = !i.FlipX; else i.FlipY = !i.FlipY; },
+                        ChangeFlags.Visual | ChangeFlags.Properties);
+                    menu.Items.Add(item);
+                }
+            }
+            Add("Rozciągnij na panel","", null, () => FillPanel_Click(this, new RoutedEventArgs()));
             Add(hit.Locked ? "Odblokuj" : "Zablokuj", hit.Locked ? "" : "", null, () => ToggleLock_Click(this, new RoutedEventArgs()));
             Add("Ukryj", "", null, () => ToggleHide_Click(this, new RoutedEventArgs()));
             menu.Items.Add(new MenuFlyoutSeparator());

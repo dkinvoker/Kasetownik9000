@@ -34,7 +34,9 @@ public partial class App : Application
     ///       [--export-pdf out.pdf [--calibrated]] [--export-png out.png] [--export-kaseta out.kaseta]
     ///       [--print "Nazwa drukarki" [--print-file wydruk.pdf]] [--print-calibration "Nazwa drukarki" [--print-file test.pdf]]
     ///       [--export-3d mockup.png [--yaw -28] [--pitch 24] [--zoom 1] [--case on|off]] [--export-gif obrot.gif]
+    ///       [--inside] (nowy projekt: dodaj wnętrze J-karty) [--no-duplex] [--duplex-short] [--print-duplex-test "Nazwa drukarki"]
     ///   PDF i druk obejmują cały komplet kart, chyba że podano --card albo --fill.
+    ///   Wnętrza kart idą na odwrocie arkusza (w PDF: strony przód/tył na przemian), chyba że podano --no-duplex.
     /// </summary>
     private async Task RunCliExportAsync(string[] cli)
     {
@@ -49,7 +51,7 @@ public partial class App : Application
 
             // pierwszy argument pozycyjny (nie wartość opcji) = projekt do wczytania
             string? project = null;
-            string[] flags = ["--fill", "--komplet", "--calibrated"];
+            string[] flags = ["--fill", "--komplet", "--calibrated", "--inside", "--no-duplex", "--duplex-short"];
             for (int i = 1; i < cli.Length; i++)
             {
                 if (flags.Contains(cli[i])) continue;
@@ -66,6 +68,7 @@ public partial class App : Application
             else
             {
                 session = new EditorSession(Starters.CreateProject(Arg("--format") ?? "jcard", Arg("--starter") ?? "retro", cli.Contains("--komplet")));
+                if (cli.Contains("--inside")) session.AddInside(session.Project.Cards[0]);
             }
             if (int.TryParse(Arg("--card"), out var cardIndex)) session.SelectCard(cardIndex - 1);
             if (Arg("--tracks") is { } trackSpec)
@@ -83,6 +86,8 @@ public partial class App : Application
                 AllCards = !cli.Contains("--fill") && Arg("--card") is null,
                 ApplyCalibration = cli.Contains("--calibrated"),
                 Dpi = int.TryParse(Arg("--dpi"), out var dpi) ? dpi : 300,
+                Duplex = !cli.Contains("--no-duplex"),
+                DuplexShortEdge = cli.Contains("--duplex-short"),
             };
             if (Arg("--export-png") is { } png) await Exporter.ExportPngAsync(Path.GetFullPath(png), session, opt);
             if (Arg("--export-pdf") is { } pdf)
@@ -112,6 +117,12 @@ public partial class App : Application
             {
                 var file = Arg("--print-file") is { } pf ? Path.GetFullPath(pf) : null;
                 var r = await PrintService.PrintCalibrationToPrinterAsync(calPrinter, file);
+                if (r.Error is not null) throw new InvalidOperationException(r.Error);
+            }
+            if (Arg("--print-duplex-test") is { } dupPrinter)
+            {
+                var file = Arg("--print-file") is { } pf ? Path.GetFullPath(pf) : null;
+                var r = await PrintService.PrintDuplexTestToPrinterAsync(dupPrinter, cli.Contains("--duplex-short"), file);
                 if (r.Error is not null) throw new InvalidOperationException(r.Error);
             }
             if (Arg("--print") is { } printer)

@@ -28,8 +28,6 @@ Orientacyjna ilość pracy: **[S]** mała, **[M]** średnia, **[L]** duża.
   gradienty w tłach i kształtach, linijki.
 
 ## 🖨️ Druk
-- **Wnętrze karty [M]:** druk dwustronny, z tekstami piosenek i podziękowaniami w środku, jak w prawdziwych
-  wydaniach. Z pomocnikiem do wyrównania stron.
 - **Wektorowy PDF [L]:** tekst jako krzywe zamiast obrazu, idealnie ostry nawet w drukarni.
 
 ## 📦 Podgląd 3D

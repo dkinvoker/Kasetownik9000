@@ -490,9 +490,11 @@ public sealed partial class Preview3DView : UserControl
         var scene = new Scene();
 
         // karta z przodem (J-card) i karta z naklejkami — z całego projektu, niezależnie od aktywnej zakładki
-        var jcard = project.Cards.FirstOrDefault(c => c.HasRole(PanelRole.Front))
-                    ?? project.Cards.FirstOrDefault(c => !c.HasRole(PanelRole.Label));
-        var labelCard = project.Cards.FirstOrDefault(c => c.HasRole(PanelRole.Label));
+        // (wnętrza kart — druga strona kartki — nie są osobnymi okładkami)
+        var outers = project.OuterCards.ToList();
+        var jcard = outers.FirstOrDefault(c => c.HasRole(PanelRole.Front))
+                    ?? outers.FirstOrDefault(c => !c.HasRole(PanelRole.Label));
+        var labelCard = outers.FirstOrDefault(c => c.HasRole(PanelRole.Label));
         var labels = labelCard is null ? [] : Enumerable.Range(0, labelCard.Panels.Count).Where(i => labelCard.Panels[i].Role == PanelRole.Label).ToList();
 
         CanvasRenderTarget? labelA = null, labelB = null;

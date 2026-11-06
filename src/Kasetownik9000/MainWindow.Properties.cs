@@ -217,6 +217,18 @@ public sealed partial class MainWindow
             SetNum(BleedBox, d.Bleed);
             CardBackgroundButton.Hex = d.Background;
             RebuildPanelsEditor();
+
+            // wnętrze: wymiary i panele są zawsze takie jak w karcie zewnętrznej — zmienia się je tam
+            bool structural = !d.IsInside;
+            FormatCombo.IsEnabled = CardWidthBox.IsEnabled = BleedBox.IsEnabled = PanelsHost.IsHitTestVisible = structural;
+            PanelsHost.Opacity = structural ? 1 : 0.5;
+            AddPanelButton.IsEnabled = structural;
+            if (!structural)
+            {
+                FormatDescription.Text = $"Wnętrze karty „{_session.Project.OuterOf(d)?.Name}” — druga strona tej samej kartki. " +
+                                         "Wymiary i panele zmieniasz na karcie zewnętrznej. Projektuj tak, jak widać kartkę " +
+                                         "po odwróceniu (lewa ↔ prawa).";
+            }
         }
         finally { _ui = old; }
     }
@@ -367,6 +379,8 @@ public sealed partial class MainWindow
                 case ImageElement img:
                     FitCombo.SelectedIndex = (int)img.Fit;
                     FilterCombo.SelectedIndex = (int)img.Filter;
+                    FlipXToggle.IsChecked = img.FlipX;
+                    FlipYToggle.IsChecked = img.FlipY;
                     break;
 
                 case ShapeElement s:
@@ -613,6 +627,12 @@ public sealed partial class MainWindow
         var loaded = await LoadImageAsync(path);
         if (loaded is null || _session.Selected is not ImageElement) return;
         Edit<ImageElement>(null, i => i.AssetId = loaded.Value.Id);
+    }
+
+    private void Flip_Click(object sender, RoutedEventArgs e)
+    {
+        bool x = FlipXToggle.IsChecked == true, y = FlipYToggle.IsChecked == true;
+        Edit<ImageElement>(null, i => { i.FlipX = x; i.FlipY = y; });
     }
 
     private void ImageAspect_Click(object sender, RoutedEventArgs e)
